@@ -81,7 +81,7 @@ def load_static_camera_from_file(filename):
         height = calib['image_height']
         dist = np.array(calib['distortion_coefficients'], dtype=np.float64)
 
-        if isinstance(dist, basestring) and dist == 'None':
+        if isinstance(dist, str) and dist == 'None':
             dist = np.zeros(4, dtype=np.float64)
 
         fx = calib['fx']
