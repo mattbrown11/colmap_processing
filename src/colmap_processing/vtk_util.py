@@ -481,7 +481,7 @@ def render_distored_image(width, height, K, dist, cam_pos, R, model_reader,
     # Unproject these rays.
     ray_dir = np.ones((len(pts), 3), dtype=np.float)
     ray_dir0 = cv2.undistortPoints(np.expand_dims(pts, 0), K, dist, R=None)
-    ray_dir[:, :2] = np.squeeze(ray_dir0, 0)
+    ray_dir[:, :2] = np.squeeze(ray_dir0)
 
     K_ = np.identity(3)
     points2 = cv2.projectPoints(ray_dir, np.zeros(3, dtype=np.float32),
@@ -535,7 +535,7 @@ def render_distored_image(width, height, K, dist, cam_pos, R, model_reader,
     X, Y = np.meshgrid(np.arange(width) + 0.5, np.arange(height) + 0.5)
     points = np.vstack([X.ravel(), Y.ravel()])
     ray_dir = cv2.undistortPoints(np.expand_dims(points.T, 0), K, dist, None)
-    ray_dir = np.squeeze(ray_dir, 0).astype(np.float32).T
+    ray_dir = np.squeeze(ray_dir).astype(np.float32).T
     ray_dir = np.vstack([ray_dir, np.ones(ray_dir.shape[1])])
     points2 = cv2.projectPoints(ray_dir.T, np.zeros(3, dtype=np.float32),
                                 np.zeros(3, dtype=np.float32), K_, None)[0]
