@@ -222,8 +222,8 @@ class PlatformPoseInterp(PlatformPoseProvider):
 
 
 class PlatformPoseFixed(PlatformPoseProvider):
-    def __init__(self, pos=np.array([0,0,0]),
-                 quat=np.array([1/np.sqrt(2),1/np.sqrt(2),0,0]), lat0=None,
+    def __init__(self, pos=np.array([0, 0, 0]),
+                 quat=np.array([0, 0, 0, 1]), lat0=None,
                  lon0=None, h0=None):
         self._pos = pos
         self._quat = quat
