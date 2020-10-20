@@ -86,6 +86,11 @@ def quaternion_multiply(quat1, quat2):
     return quat_wxyz_to_xyzw(quat)
 
 def quaternion_from_matrix(R):
+    if R.shape != (4, 4):
+        R_ = R
+        R = np.identity(4)
+        R[:3, :3] = R_
+
     return quat_wxyz_to_xyzw(transformations.quaternion_from_matrix(R))
 
 def quaternion_from_euler(xyz):
@@ -272,18 +277,36 @@ def load_from_file(filename, platform_pose_provider=None):
         return GeoStaticCamera.load_from_file(filename, platform_pose_provider)
 
 
-def ray_intersect_plane(plane_normal, plane_point, ray_direction, ray_point,
+def ray_intersect_plane(plane_point, plane_normal, ray_pos, ray_dir,
                         epsilon=1e-6):
     """From https://rosettacode.org/wiki/Find_the_intersection_of_a_line_with_a_plane#Python
 
-    """
-    ndotu = plane_normal.dot(ray_direction)
-    if abs(ndotu) < epsilon:
-        return None
+    :param ray_pos: Ray starting positions.
+    :type ray_pos : array with shape ((3) or (3,N)
 
-    w = ray_point - plane_point
-    si = -plane_normal.dot(w) / ndotu
-    Psi = w + si * ray_direction + plane_point
+    :param ray_dir: Ray directions.
+    :type ray_dir: array with shape ((3) or (3,N)
+
+    """
+    ndotu = np.dot(plane_normal, ray_dir)
+
+    if ray_dir.ndim == 1:
+        if abs(ndotu) < epsilon:
+            return np.nan
+
+        w = ray_pos - np.array(plane_point)
+        si = -plane_normal.dot(w) / ndotu
+        Psi = w + si * ray_dir + plane_point
+        return Psi
+
+    psi = np.zeros_like(ray_pos)
+    psi[:, ndotu < epsilon] = np.nan
+
+    plane_point = np.atleast_2d(plane_point)
+    plane_point.shape = (3, 1)
+    w = ray_pos - plane_point
+    si = -np.dot(plane_normal, w) / ndotu
+    Psi = w + si * ray_dir + plane_point
     return Psi
 
 
@@ -440,7 +463,7 @@ class Camera(object):
         """
         raise NotImplementedError
 
-    def unproject(self, points, t=None):
+    def unproject(self, points, t=None, normalize_ray_dir=True):
         """Unproject image points into the world at a particular time.
 
         :param points: Coordinates of a point or points within the image
@@ -450,6 +473,14 @@ class Camera(object):
         :param t: Time at which to unproject the point(s) (time in seconds
             since Unix epoch).
         :type t: float
+
+        :param normalize_dir: If set to True, the ray directions will be
+            normalized to a unit a lenght. If set to False, the projection of
+            the ray direction vectors onto the optical axis of the camera
+            (the z-axis of the camera coordinate system) will have unit
+            magnitude, useful when a depth-map projection distance is to be
+            applied.
+        :type normalize_dir: bool
 
         :return: Ray position and direction corresponding to provided image
             points. The direction points from the center of projection to the
@@ -997,7 +1028,7 @@ class StandardCamera(Camera):
                                    self._dist)[0]
         return np.squeeze(im_pts, 1).T
 
-    def unproject(self, points, t=None):
+    def unproject(self, points, t=None, normalize_ray_dir=True):
         """See Camera.unproject documentation.
 
         """
@@ -1017,7 +1048,7 @@ class StandardCamera(Camera):
         ray_dir = np.ones((3,points.shape[1]), dtype=points.dtype)
         ray_dir0 = cv2.undistortPoints(np.expand_dims(points.T, 0),
                                        self._K, self._dist, R=None)
-        ray_dir[:2] = np.squeeze(ray_dir0, 0).T
+        ray_dir[:2] = np.squeeze(ray_dir0).T
 
         # Rotate rays into the navigation coordinate system.
         ray_dir = np.dot(quaternion_matrix(self._cam_quat)[:3,:3], ray_dir)
@@ -1034,8 +1065,9 @@ class StandardCamera(Camera):
         ray_dir = np.dot(R_ins_to_world, ray_dir)
         ray_pos = np.dot(R_ins_to_world, ray_pos) + np.atleast_2d(ins_pos).T
 
-        # Normalize
-        ray_dir /= np.sqrt(np.sum(ray_dir**2, 0))
+        if normalize_ray_dir:
+            # Normalize
+            ray_dir /= np.sqrt(np.sum(ray_dir**2, 0))
 
         return ray_pos, ray_dir
 
@@ -1052,7 +1084,7 @@ class DepthCamera(StandardCamera):
         """
         super(DepthCamera, self).__init__(width=width, height=height, K=K,
                                           dist=dist, cam_pos=cam_pos,
-                                          cam_quat=cam_quat, depth_map=depth_map,
+                                          cam_quat=cam_quat,
                                           platform_pose_provider=platform_pose_provider)
         self._depth_map = depth_map
 
@@ -1089,7 +1121,7 @@ class DepthCamera(StandardCamera):
         return cls(width, height, K, dist, cam_pos, cam_quat, image_topic,
                    depth_topic, frame_id, platform_pose_provider)
 
-    def save_to_file(self, filename):
+    def save_to_file(self, filename, save_depth_viz=True):
         """See base class Camera documentation.
 
         """
@@ -1136,15 +1168,33 @@ class DepthCamera(StandardCamera):
                              'camera_position: ',to_str(self.cam_pos),
                              '\n\n']))
 
-            f.write('# Topic on which this camera\'s image is published.\n')
-            f.write(''.join(['image_topic: ',self.image_topic,'\n\n']))
+        if self.depth_map is not None:
+            im = PIL.Image.fromarray(self.depth_map.astype(np.float32),
+                                     mode='F') # float32
+            depth_map_fname = '%s_depth_map.tif' % os.path.splitext(filename)[0]
+            im.save(depth_map_fname)
 
-            f.write('# Topic on which this camera\'s depth image is published'
-                    '.\n')
-            f.write(''.join(['depth_topic: ',self.depth_topic,'\n\n']))
+            if save_depth_viz:
+                depth_viz_fname = ('%s/depth_vizualization.png' %
+                                   os.path.split(filename)[0])
+                self.save_depth_viz(depth_viz_fname)
 
-            f.write('# The frame_id embedded in the published image header.\n')
-            f.write(''.join(['frame_id: ',self.frame_id]))
+    def save_depth_viz(self, fname):
+        depth_image = self.depth_map.copy()
+        v = depth_image[np.isfinite(depth_image)]
+        if len(v) > 0:
+            vmin = np.percentile(v, 1)
+            vmax = np.percentile(v, 99)
+            depth_image -= vmin
+            depth_image[depth_image < 0] = 0
+            v = vmax - vmin
+            if v > 0:
+                depth_image /= v/255
+
+        depth_image = np.round(depth_image).astype(np.uint8)
+
+        depth_image = cv2.applyColorMap(depth_image, cv2.COLORMAP_JET)
+        cv2.imwrite(fname, depth_image[:, :, ::-1])
 
     def __str__(self):
         string = ['model_type: depth\n']
@@ -1198,7 +1248,7 @@ class DepthCamera(StandardCamera):
         """
         points = np.atleast_2d(points)
         points.shape = (2,-1)
-        ray_pos, ray_dir = self.unproject(points, t=t)
+        ray_pos, ray_dir = self.unproject(points, t=t, normalize_ray_dir=False)
 
         for i in range(points.shape[1]):
             x,y = points[:,i]
@@ -1225,9 +1275,8 @@ class DepthCamera(StandardCamera):
                 print(x == self.width)
                 print(y == self.height)
                 raise ValueError('Coordinates (%0.1f,%0.f) are outside the '
-                                 '%ix%i image with frame_id \'%s\'' %
-                                 (x,y,self.width,self.height,
-                                  str(self.frame_id)))
+                                 '%ix%i image' %
+                                 (x,y,self.width,self.height))
 
             ray_pos[:,i] += ray_dir[:,i]*depth_map[iy,ix]
 
@@ -1271,6 +1320,7 @@ class GeoStaticCamera(DepthCamera):
         super(GeoStaticCamera, self).__init__(width=width, height=height, K=K,
                                            dist=dist, cam_pos=cam_pos,
                                            cam_quat=cam_quat,
+                                           depth_map=depth_map,
                                            platform_pose_provider=platform_pose_provider)
         self._R = R
 
@@ -1457,7 +1507,7 @@ class GeoStaticCamera(DepthCamera):
                                    self.dist)[0]
         return np.squeeze(im_pts, 1).T
 
-    def unproject(self, points, t=None):
+    def unproject(self, points, t=None, normalize_ray_dir=True):
         """See Camera.unproject documentation.
 
         The ray position and direction are defined relative to a local
@@ -1472,3 +1522,19 @@ class GeoStaticCamera(DepthCamera):
         if points.ndim == 1:
             points = np.atleast_2d(points).T
             points.shape = (2,-1)
+
+        # Unproject rays into the camera coordinate system.
+        ray_dir = np.ones((3,points.shape[1]), dtype=points.dtype)
+        ray_dir0 = cv2.undistortPoints(np.expand_dims(points.T, 0),
+                                       self.K, self.dist, R=None)
+        ray_dir[:2] = np.squeeze(ray_dir0, 0).T
+
+        # Rotate rays into the local east/north/up coordinate system.
+        ray_dir = np.dot(self.R.T, ray_dir)
+
+        if normalize_ray_dir:
+            ray_dir /= np.sqrt(np.sum(ray_dir**2, 0))
+
+        ray_pos = np.zeros_like(ray_dir)
+
+        return ray_pos, ray_dir
