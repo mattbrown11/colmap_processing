@@ -458,7 +458,7 @@ class CameraPanTilt(Camera):
 
 def render_distored_image(width, height, K, dist, cam_pos, R, model_reader,
                           return_depth=True, monitor_resolution=(1920, 1080),
-                          clipping_range=[1, 2000]):
+                          clipping_range=[1, 2000], fill_holes=True):
     """Render a view from a camera with distortion.
 
     """
@@ -520,7 +520,7 @@ def render_distored_image(width, height, K, dist, cam_pos, R, model_reader,
 
     #img = cv2.resize(img, tuple(render_resolution))
 
-    if return_depth:
+    if return_depth or fill_holes:
         ret = vtk_camera.unproject_view(model_reader,
                                         clipping_range=clipping_range)
         E, N, U, depth = ret
@@ -543,8 +543,8 @@ def render_distored_image(width, height, K, dist, cam_pos, R, model_reader,
     X2 = np.reshape(points2[0], X.shape).astype(np.float32)
     Y2 = np.reshape(points2[1], Y.shape).astype(np.float32)
     img = cv2.remap(img, X2, Y2, cv2.INTER_LINEAR)
-
-    if return_depth:
+   
+    if return_depth or fill_holes:
         X = cv2.remap(E, X2, Y2, cv2.INTER_LINEAR)
         Y = cv2.remap(N, X2, Y2, cv2.INTER_LINEAR)
         Z = cv2.remap(U, X2, Y2, cv2.INTER_LINEAR)

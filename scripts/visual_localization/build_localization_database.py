@@ -53,19 +53,19 @@ import colmap_processing.vtk_util as vtk_util
 
 # ----------------------------------------------------------------------------
 # Base path to the colmap directory.
-image_dir = '/mnt/ten_tb_data/ursa/building_cal1/images0'
+image_dir = '/mnt/ten_tb_data/ursa/building_cal2/images0'
 
 # Path to the images.bin file.
-images_bin_fname = '/mnt/ten_tb_data/ursa/building_cal1/images.bin'
+images_bin_fname = '/mnt/ten_tb_data/ursa/building_cal2/images.bin'
 
 # Path to the images.bin file.
-camera_bin_fname = '/mnt/ten_tb_data/ursa/building_cal1/cameras.bin'
+camera_bin_fname = '/mnt/ten_tb_data/ursa/building_cal2/cameras.bin'
 
 # Path to the points3D.bin file.
-points_3d_bin_fname = '/mnt/ten_tb_data/ursa/building_cal1/points3D.bin'
+points_3d_bin_fname = '/mnt/ten_tb_data/ursa/building_cal2/points3D.bin'
 
 # Meshed model location.
-meshed_model_fname = '/home/matt.brown/projects/mesh.ply'
+meshed_model_fname = '/home/matt.brown/projects/mesh_smaller.ply'
 
 # Test image not from original set.
 test_image_fname = '/mnt/ten_tb_data/ursa/building_cal1/images0/IMG_0793.JPG'
@@ -85,84 +85,102 @@ except:
     prev_loaded_fname = meshed_model_fname
 
 # Read in the details of all images.
-images = read_images_binary(images_bin_fname)
+colmap_images = read_images_binary(images_bin_fname)
 
 # Read cameras.
 cameras = read_cameras_binary(camera_bin_fname)
 
-std_cams = standard_cameras_from_colmap(cameras, images)
+# Create camera models.
+std_cams = standard_cameras_from_colmap(cameras, colmap_images)
 
-orb = cv2.ORB(nfeatures=5000000, scaleFactor=1.2, nlevels=20, edgeThreshold=31,
-              firstLevel=0, patchSize=31)
+
+class Image(object):
+    def __init__(self, colmap_image, std_cams, model_reader, keypoints=None, 
+                 descriptors=None):
+        
+        camera_model = std_cams[colmap_image.camera_id]
+        image_filename = '%s/%s' % (image_dir, colmap_image.name)
+        self.image_filename = image_filename
+        self.t = colmap_image
+        
+        image = cv2.imread(image_filename)
+
+        if image.ndim == 3:
+            image = image[:, :, ::-1]
+            
+        self.image = image
+        self.camera_model = camera_model
+        self.model_reader = model_reader
+        self.keypoints = keypoints
+        self.descriptors = descriptors
+    
+    def render_image(self):
+        # 'platform_pose_provider' stored with the camera model has been 
+        # overloaded to treat 'image_num' as time. Therefore, passing 
+        # t = image_num will recover the pose of the camera when it took image
+        # 'image_num'.
+        pose_mat = camera.get_camera_pose(image_num)
+        R = pose_mat[:3, :3]
+        cam_pos = -np.dot(R.T, pose_mat[:,3])
+        
+        img2 = render_distored_image(camera.width, camera.height, camera.K, 
+                                    camera.dist, cam_pos, R, model_reader, 
+                                    return_depth=False, 
+                                    monitor_resolution=monitor_resolution, 
+                                    clipping_range=[0.01, 20000])
+
+
+images = {}
+for image_num in colmap_images:
+    # Look at the Colmap files.
+    colmap_image = colmap_images[image_num]
+    
+    images[image_num] = Image(colmap_image, std_cams, model_reader)
+
+
+if False:
+    # Sanity check that the views agree with the 3-D model.
+    image_num = list(images.keys())[0]
+
+    
+
+    
+    plt.close('all')
+    plt.imshow(img)
+    plt.figure()
+    plt.imshow(img2)
+    
+    
+def image_feature(object):
+    __slots__ = ['size', 'descriptor']
+    
+    def __init__(descriptor, size=-1):
+        self.descriptor = descriptor
+        self.size = size
+
+
+orb = cv2.ORB_create(nfeatures=50000, scaleFactor=1.2, nlevels=20, 
+                     edgeThreshold=31, firstLevel=0, patchSize=31)
+
 
 feat_descr = []
 feat_3d = []
 # Remove image keypoints without associated reconstructed 3-D point.
 for image_num in images:
     image = images[image_num]
-    camera = std_cams[image.camera_id]
-
-    ind = [_ for _ in range(len(image.xys)) if image.point3D_ids[_] != -1]
-    xys = image.xys[ind]
-    point3D_ids = image.point3D_ids[ind]
-    
-    if False:
-        images[image_num] = Image(id=image.id, qvec=image.qvec, 
-                                  tvec=image.tvec, camera_id=image.camera_id, 
-                                  name=image.name, xys=xys, 
-                                  point3D_ids=point3D_ids)
-
-    image = images[image_num]
     img_fname = '%s/%s' % (image_dir, image.name)
     img = cv2.imread(img_fname)
 
     if img.ndim == 3:
         img = img[:, :, ::-1]
-    
-    # 'platform_pose_provider' stored with the camera model has been overloaded
-    # to treat 'image_num' as time. Therefore, passing t = image_num will 
-    # recover the pose of the camera when it took image 'image_num'.
-    pose_mat = camera.get_camera_pose(image_num)
-    R = pose_mat[:3, :3]
-    cam_pos = -np.dot(R.T, pose_mat[:,3])
-    ret = render_distored_image(camera.width, camera.height, camera.K, 
-                                camera.dist, cam_pos, R, model_reader, 
-                                return_depth=True, 
-                                monitor_resolution=monitor_resolution, 
-                                clipping_range=[1, 20000])
-    
-    img2, depth, X, Y, Z = ret
-    
-    if False:
-        plt.close('all')
-        plt.imshow(img)
-
-    if False:
-        plt.imshow(img)
-        plt.plot(xys[:, 0], xys[:, 1], 'ro')
-
-    col, row = np.round(xys).astype(np.int).T
-
-    # Map to 3-D point index.
-    map3dind = np.zeros(img.shape[:2], dtype=np.uint)
-    map3dind[row, col] = point3D_ids
-
-    # Create mask.
-    mask = np.zeros(img.shape[:2], dtype=np.uint8)
-    mask[row, col] = 1
-
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(25, 25))
-    mask = cv2.dilate(mask, kernel, iterations=10)
-
-    # We could pass in the locations for the features that are already known,
-    # but this misses scale information about where the features come from.
-    kp = orb.detect(img, mask)
-
-    [cv2.KeyPoint(*xy) for xy in xys]
 
     # compute the descriptors with ORB
-    kp, des = orb.compute(img, kp)
-
+    kp, des = orb.detectAndCompute(img, None)
+    
+    if False:
+        plt.imshow(cv2.drawKeypoints(img, kp, img.copy(), color=(255,0,0),
+                   flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS))
+    
 
 
 kp, des = orb.compute(img, kp)
