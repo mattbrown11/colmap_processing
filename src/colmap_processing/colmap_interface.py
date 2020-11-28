@@ -34,6 +34,10 @@ import numpy as np
 import os
 import collections
 import struct
+import transformations
+
+from colmap_processing.camera_models import StandardCamera
+from colmap_processing.platform_pose import PlatformPoseInterp
 
 
 CameraModel = collections.namedtuple(
@@ -295,3 +299,60 @@ def rotmat2qvec(R):
     if qvec[0] < 0:
         qvec *= -1
     return qvec
+
+
+def standard_cameras_from_colmap(cameras, images=None):
+    """Parse Colmap 'cameras' and 'images' into instances of StandardCamera.
+    
+    :param cameras: Output from read_cameras_text or read_cameras_binary.
+    :type cameras: dict
+    
+    :param images: Output from read_images_text or read_images_binary.
+    :type images: dict | None
+    
+    :return: Dictionary indexable by camera_id returning StandardCamera. If 
+        arguement 'images' is not None, an instance of PlatformPoseProvider is 
+        returned where its time input arguement should be the image index.
+    :rtype: (dict, PlatformPoseProvider | None)
+        
+    """
+    if images is not None:
+        # Pretend image index is the time.
+        platform_pose_provider = PlatformPoseInterp()
+        for image_id in images:
+            image = images[image_id]
+        
+            R = qvec2rotmat(image.qvec)
+            pos = -np.dot(R.T, image.tvec)
+        
+            # The qvec used by Colmap is a (w, x, y, z) quaternion 
+            # representing the rotation of a vector defined in the world 
+            # coordinate system into the camera coordinate system. However, 
+            # the 'camera_models' module assumes (x, y, z, w) quaternions 
+            # representing a coordinate system rotation.
+            quat = transformations.quaternion_inverse(image.qvec)
+            quat = [quat[1], quat[2], quat[3], quat[0]]
+        
+            t = image_id
+            platform_pose_provider.add_to_pose_time_series(t, pos, quat)    
+    else:
+        platform_pose_provider = None
+    
+    std_cams = {}
+    for camera_id in set([images[image_id].camera_id for image_id in images]):
+        colmap_camera = cameras[camera_id]
+    
+        if colmap_camera.model == 'OPENCV':
+            fx, fy, cx, cy, d1, d2, d3, d4 = colmap_camera.params
+        elif colmap_camera.model == 'PINHOLE':
+            fx, fy, cx, cy = colmap_camera.params
+            d1 = d2 = d3 = d4 = 0
+    
+        K = K = np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
+        dist = np.array([d1, d2, d3, d4])
+        std_cams[camera_id] = StandardCamera(colmap_camera.width,
+                                                   colmap_camera.height, K, dist,
+                                                   [0, 0, 0], [0, 0, 0, 1],
+                                                   platform_pose_provider)
+    
+    return std_cams
