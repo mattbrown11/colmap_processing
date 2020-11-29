@@ -1048,7 +1048,7 @@ class StandardCamera(Camera):
         ray_dir = np.ones((3,points.shape[1]), dtype=points.dtype)
         ray_dir0 = cv2.undistortPoints(np.expand_dims(points.T, 0),
                                        self._K, self._dist, R=None)
-        ray_dir[:2] = np.squeeze(ray_dir0).T
+        ray_dir[:2] = np.squeeze(ray_dir0, 0).T
 
         # Rotate rays into the navigation coordinate system.
         ray_dir = np.dot(quaternion_matrix(self._cam_quat)[:3,:3], ray_dir)
