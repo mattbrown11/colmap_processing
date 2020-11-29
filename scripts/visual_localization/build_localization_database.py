@@ -46,29 +46,33 @@ from colmap_processing.geo_conversions import llh_to_enu
 from colmap_processing.colmap_interface import read_images_binary, Image, \
     read_points3d_binary, read_cameras_binary, qvec2rotmat, \
     standard_cameras_from_colmap
-from colmap_processing.database import COLMAPDatabase, pair_id_to_image_ids, blob_to_array
+from colmap_processing.database import COLMAPDatabase, pair_id_to_image_ids, \
+    blob_to_array
 from colmap_processing.vtk_util import render_distored_image
 import colmap_processing.vtk_util as vtk_util
 
 
 # ----------------------------------------------------------------------------
 # Base path to the colmap directory.
-image_dir = '/mnt/ten_tb_data/ursa/building_cal2/images0'
+colmap_data_dir = '/media/mattb/7e7167ba-ad6f-4720-9ced-b699f49ba3aa/ursa/20201012_north_star_reach/building_cal2'
+
+# Image directory.
+image_dir = '%s/images0' % colmap_data_dir
 
 # Path to the images.bin file.
-images_bin_fname = '/mnt/ten_tb_data/ursa/building_cal2/images.bin'
+images_bin_fname = '%s/images.bin' % colmap_data_dir
 
 # Path to the images.bin file.
-camera_bin_fname = '/mnt/ten_tb_data/ursa/building_cal2/cameras.bin'
+camera_bin_fname = '%s/cameras.bin' % colmap_data_dir
 
 # Path to the points3D.bin file.
-points_3d_bin_fname = '/mnt/ten_tb_data/ursa/building_cal2/points3D.bin'
+points_3d_bin_fname = '%s/points3D.bin' % colmap_data_dir
 
 # Meshed model location.
-meshed_model_fname = '/home/matt.brown/projects/mesh_smaller.ply'
+meshed_model_fname = '%s/mesh_smaller.ply' % colmap_data_dir
 
 # Test image not from original set.
-test_image_fname = '/mnt/ten_tb_data/ursa/building_cal1/images0/IMG_0793.JPG'
+test_image_fname = '/media/mattb/7e7167ba-ad6f-4720-9ced-b699f49ba3aa/ursa/20201012_north_star_reach/building_cal1/images/IMG_0795.JPG'
 
 # Monitor resolution for rendering depth maps.
 monitor_resolution = (1920, 1080)
@@ -94,93 +98,344 @@ cameras = read_cameras_binary(camera_bin_fname)
 std_cams = standard_cameras_from_colmap(cameras, colmap_images)
 
 
+# Define a convenience object that manages all projection operations from image.
 class Image(object):
-    def __init__(self, colmap_image, std_cams, model_reader, keypoints=None, 
+    def __init__(self, colmap_image, std_cams, model_reader, keypoints=None,
                  descriptors=None):
-        
-        camera_model = std_cams[colmap_image.camera_id]
-        image_filename = '%s/%s' % (image_dir, colmap_image.name)
-        self.image_filename = image_filename
-        self.t = colmap_image
-        
-        image = cv2.imread(image_filename)
 
-        if image.ndim == 3:
-            image = image[:, :, ::-1]
-            
-        self.image = image
-        self.camera_model = camera_model
+        self.camera_model = std_cams[colmap_image.camera_id]
+        self.image_filename = '%s/%s' % (image_dir, colmap_image.name)
+        self.image_id = colmap_image.id
+        self.img_time = colmap_image.id
+        self._image = None
         self.model_reader = model_reader
         self.keypoints = keypoints
         self.descriptors = descriptors
-    
-    def render_image(self):
-        # 'platform_pose_provider' stored with the camera model has been 
-        # overloaded to treat 'image_num' as time. Therefore, passing 
+
+    @property
+    def image(self):
+        if self._image is None:
+            image = cv2.imread(self.image_filename)
+
+            if image.ndim == 3:
+
+                image = image[:, :, ::-1]
+            self._image = image
+
+        return self._image
+
+    def render_model(self, clipping_range=[0.01, 20000]):
+        """Return image rendered frm the 3-D model.
+
+        """
+        # 'platform_pose_provider' stored with the camera model has been
+        # overloaded to treat 'image_num' as time. Therefore, passing
         # t = image_num will recover the pose of the camera when it took image
         # 'image_num'.
-        pose_mat = camera.get_camera_pose(image_num)
+        camera = self.camera_model
+        pose_mat = camera.get_camera_pose(self.img_time)
         R = pose_mat[:3, :3]
         cam_pos = -np.dot(R.T, pose_mat[:,3])
-        
-        img2 = render_distored_image(camera.width, camera.height, camera.K, 
-                                    camera.dist, cam_pos, R, model_reader, 
-                                    return_depth=False, 
-                                    monitor_resolution=monitor_resolution, 
-                                    clipping_range=[0.01, 20000])
+
+        img2 = render_distored_image(camera.width, camera.height, camera.K,
+                                     camera.dist, cam_pos, R, model_reader,
+                                     return_depth=False,
+                                     monitor_resolution=monitor_resolution,
+                                     clipping_range=clipping_range,
+                                     fill_holes=False)
+
+        return img2
+
+    def project(self, points):
+        """Project world points into the image at a particular time.
+
+        :param points: Coordinates of a point or points within the world
+            coordinate system. The coordinate may be Cartesian or homogenous.
+        :type points: array with shape (3), (4), (3,n), (4,n)
+
+        :param t: Time at which to project the point(s) (time in seconds since
+            Unix epoch).
+        :type t: float
+
+        :return: Image coordinates associated with points.
+        :rtype: numpy.ndarray of size (2,n)
+
+        """
+        return self.camera_model.project(points, t=self.img_time)
+
+    def unproject(self, points, normalize_ray_dir=True):
+        """Unproject image points into the world at a particular time.
+
+        :param points: Coordinates of a point or points within the image
+            coordinate system. The coordinate may be Cartesian or homogenous.
+        :type points: array with shape (2), (2,N), (3) or (3,N)
+
+        :param t: Time at which to unproject the point(s) (time in seconds
+            since Unix epoch).
+        :type t: float
+
+        :param normalize_dir: If set to True, the ray directions will be
+            normalized to a unit a lenght. If set to False, the projection of
+            the ray direction vectors onto the optical axis of the camera
+            (the z-axis of the camera coordinate system) will have unit
+            magnitude, useful when a depth-map projection distance is to be
+            applied.
+        :type normalize_dir: bool
+
+        :return: Ray position and direction corresponding to provided image
+            points. The direction points from the center of projection to the
+            points. The direction vectors are not necassarily normalized.
+        :rtype: [ray_pos, ray_dir] where both of type numpy.ndarry with shape
+            (3,n).
+
+        """
+        return self.camera_model.unproject(points, t=self.img_time,
+                                           normalize_ray_dir=normalize_ray_dir)
 
 
 images = {}
 for image_num in colmap_images:
     # Look at the Colmap files.
     colmap_image = colmap_images[image_num]
-    
+
     images[image_num] = Image(colmap_image, std_cams, model_reader)
 
 
 if False:
     # Sanity check that the views agree with the 3-D model.
-    image_num = list(images.keys())[0]
-
-    
-
-    
+    image_num = 90
     plt.close('all')
-    plt.imshow(img)
-    plt.figure()
-    plt.imshow(img2)
-    
-    
-def image_feature(object):
-    __slots__ = ['size', 'descriptor']
-    
-    def __init__(descriptor, size=-1):
+    plt.figure();   plt.imshow(images[image_num].render_model())
+    plt.figure();   plt.imshow(images[image_num].image)
+
+
+class image_feature(object):
+    __slots__ = ['im_pt', 'image', 'proj_matrix', 'descriptor', 'matches',
+                 'view_pos', 'angular_size', 'size_pixels', 'xyz']
+
+    def __init__(self, im_pt, image, descriptor, proj_matrix, view_pos,
+                 size_pixels, angular_size):
+        """
+
+        :param proj_matrix: Virtual camera matrix that maps the world feature to
+            unit circle centered at (0, 0) and with its major axis aligned
+            with positive x direction in a virtual image coordinate system.
+        :type proj_matrix: 3x4 matrix
+
+        """
+        self.im_pt = im_pt
+        self.image = image
+        self.proj_matrix = proj_matrix
+        self.view_pos = view_pos
+        self.size_pixels = size_pixels
+        self.angular_size = angular_size
         self.descriptor = descriptor
-        self.size = size
+        self.matches = []
+        self.xyz = None
 
 
-orb = cv2.ORB_create(nfeatures=50000, scaleFactor=1.2, nlevels=20, 
+orb = cv2.ORB_create(nfeatures=5000, scaleFactor=1.2, nlevels=20,
                      edgeThreshold=31, firstLevel=0, patchSize=31)
 
 
-feat_descr = []
-feat_3d = []
-# Remove image keypoints without associated reconstructed 3-D point.
+image_features = {}
 for image_num in images:
+    print('Calculating ORB features for image % i' % image_num)
     image = images[image_num]
-    img_fname = '%s/%s' % (image_dir, image.name)
-    img = cv2.imread(img_fname)
+    kp, des = orb.detectAndCompute(image.image, None)
 
-    if img.ndim == 3:
-        img = img[:, :, ::-1]
+    # Remove the cached image so we don't run out of memory.
+    image._image = None
 
-    # compute the descriptors with ORB
-    kp, des = orb.detectAndCompute(img, None)
-    
     if False:
         plt.imshow(cv2.drawKeypoints(img, kp, img.copy(), color=(255,0,0),
                    flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS))
-    
+
+    image.keypoints = kp
+    image.descriptors = des
+
+    image_features_ = []
+    for i in range(len(kp)):
+        # Launch a ray from the feature's center.
+        cam_pos, zdir = image.unproject(kp[i].pt, normalize_ray_dir=True)
+
+        # Launch a ray from a point on the circle of diameter kp[i].size from
+        # the point aligned with the feature's major axis.
+        v = np.array(np.cos(kp[i].angle/180*np.pi),
+                     np.sin(kp[i].angle/180*np.pi))
+        pt2 = v*kp[i].size/2 +  kp[i].pt
+        _, ray_dir2 = image.unproject(pt2, normalize_ray_dir=True)
+
+        half_angle = np.arccos(float(np.dot(ray_dir2.T, zdir)))
+        f = 1/np.tan(half_angle)
+
+        # Find the component of ray_dir2 that is perpendicular to zdir.
+        xdir = ray_dir2 - np.dot(ray_dir2.T, zdir)*zdir
+        xdir /= np.linalg.norm(xdir)
+
+        ydir = np.cross(zdir.T, xdir.T).T
+
+        R = np.vstack([xdir.T, ydir.T, zdir.T])
+        K = np.diag([f, f, 1])
+
+        # K*R|T projection matrix.
+        T = -np.dot(R, cam_pos)
+        proj_matrix = np.dot(K, np.hstack([R, T]))
+
+        if False:
+            # Should be <0, 0, 1>.
+            np.dot(P, np.vstack([cam_pos + 10*zdir, 1]))
+
+            # Should be <0, 0, 1>.
+            im_pt = np.dot(P, np.vstack([cam_pos + 10*ray_dir2, 1]))
+            im_pt = im_pt[:2]/im_pt[2]
+
+        image_features_.append(image_feature(kp[i].pt, image, des[i],
+                                             proj_matrix, cam_pos,
+                                             kp[i].size, half_angle*2))
+
+    image_features[image_num] = image_features_
+
+
+def likely_same_feature(feat1, feat2):
+    xyz = cv2.triangulatePoints(feat1.proj_matrix,
+                                feat2.proj_matrix, (0, 0), (0, 0))
+
+    # Make sure the points are in front of the camera.
+    xyz3 = xyz[:3]/xyz[3]
+    v1 = xyz3 - feat1.view_pos
+    v2 = xyz3 - feat2.view_pos
+
+    dp = np.dot(v1.T, v2)/np.linalg.norm(v1)/np.linalg.norm(v2)
+    angle_baseline = np.arccos(float(dp))*180/np.pi
+
+    if angle_baseline > 40:
+        return False
+
+    if np.dot(feat1.proj_matrix[2, :3], v1) < 0:
+        return False
+
+    if np.dot(feat2.proj_matrix[2, :3], v2) < 0:
+        return False
+
+    im_pti = np.dot(feat1.proj_matrix, xyz)
+    im_pti = im_pti[:2]/im_pti[2]
+    im_ptj = np.dot(feat2.proj_matrix, xyz)
+    im_ptj = im_ptj[:2]/im_ptj[2]
+
+    # The projection matrices map the sphere surrounding the real-world
+    # feature into a unit circle. So, we will define good alignment as
+    # mapping the triangulated point to within a circle with radius
+    # 0.25.
+    thresh = 0.5
+    if (np.linalg.norm(im_pti) > thresh or
+        np.linalg.norm(im_ptj) > thresh):
+        return False
+
+    # Check to see if the sizes make sense.
+    d1 = np.linalg.norm(v1)
+    d2 = np.linalg.norm(v2)
+
+    # feat1 was viewed sd times closer.
+    sd = d2/d1
+
+    # feat1 manifested as sa times larger angular size.
+    sa = feat1.angular_size/feat2.angular_size
+
+    size_discrepancy_factor = sa/sd
+
+    if size_discrepancy_factor < 1:
+        # Make it so it always represents a value greater than
+        # 1.
+        size_discrepancy_factor = 1/size_discrepancy_factor
+
+    if size_discrepancy_factor > 2:
+        return False
+
+    return True
+
+
+# Define matchers.
+bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+FLANN_INDEX_LSH = 6
+index_params = dict(algorithm=FLANN_INDEX_LSH, table_number=6,
+                    key_size=12, multi_probe_level=1)
+search_params = dict(checks=50)   # or pass empty dictionary
+
+flann = cv2.FlannBasedMatcher(index_params, search_params)
+
+
+# Exhaustive matching.
+image_nums = sorted(list(images.keys()))
+for i in range(len(image_nums)):
+    numi = image_nums[i]
+    try:
+        image_featuresi = image_features[numi]
+    except KeyError:
+        continue
+
+    descri = np.array([feat.descriptor for feat in image_featuresi])
+    for j in range(i + 1, len(image_nums)):
+        print('Matching image %i to %i' % (i + 1, j + 1))
+        numj = image_nums[j]
+
+        try:
+            image_featuresj = image_features[numj]
+        except KeyError:
+            continue
+
+        descrj = np.array([feat.descriptor for feat in image_featuresj])
+
+        if False:
+            matches = [bf.match(descri, descrj)]
+        else:
+            # FLANN.
+            matches = flann.knnMatch(descri, descrj, k=1)
+
+        tic = time.time()
+        for k, matches_ in enumerate(matches):
+            for m in matches_:
+                feat1 = image_featuresi[m.queryIdx]
+                feat2 = image_featuresj[m.trainIdx]
+
+                if likely_same_feature(feat1, feat2):
+                    feat1.matches.append(feat2)
+                    feat2.matches.append(feat1)
+
+        print((time.time() - tic))
+
+            #print(m.queryIdx, m.trainIdx)
+
+        if False:
+            # Visualize:
+            imgi = images[numi].image.copy()
+            imgj = images[numj].image.copy()
+
+            for feat in image_features[numi]:
+                for feat2 in feat.matches:
+                    if feat2.image.image_id == numj:
+                        cv2.circle(imgi,
+                                   tuple(np.round(feat.im_pt).astype(np.int)),
+                                   int(feat.size_pixels),  color=(255, 0, 255),
+                                   thickness=3)
+
+                        cv2.circle(imgj,
+                                   tuple(np.round(feat2.im_pt).astype(np.int)),
+                                   int(feat2.size_pixels),  color=(255, 0, 255),
+                                   thickness=3)
+
+            plt.close('all')
+            figi = plt.figure()
+            plt.imshow(imgi)
+            figj = plt.figure()
+            plt.imshow(imgj)
+
+
+
+
+
+
+
 
 
 kp, des = orb.compute(img, kp)
@@ -212,229 +467,6 @@ kp, des = orb.compute(img, kp)
 pts_3d = read_points3d_binary(points_3d_bin_fname)
 
 
-# Load in georegistration points.
-xyz_to_enu = []
-for fname in glob.glob('%s/*_points.txt' % georegister_data_dir):
-    image_id = int(os.path.split(fname)[1].split('_points.txt')[0])
-    image = images[image_id]
-
-    pts = np.loadtxt(fname)
-    pts = np.atleast_2d(pts)
-
-    for pt in pts:
-        ind0 = [_ for _ in range(len(image.xys)) if image.point3D_ids[_] != -1]
-        xys = image.xys[ind0]
-        d = np.sqrt(np.sum((xys - np.atleast_2d(pt[:2]))**2, 1))
-        ind1 = np.argmin(d)
-
-        print('Distance to select point:', d[ind1], 'pixels')
-        if d[ind1] > 20:
-            continue
-
-        xyz = pts_3d[image.point3D_ids[ind0[ind1]]].xyz
-
-        lat, lon = pt[2:]
-        enu = llh_to_enu(lat, lon, 0, lat0, lon0, 0)
-        xyz_to_enu.append(np.hstack([xyz, enu]))
-
-
-xyz_to_enu = np.array(xyz_to_enu)
-east_north = xyz_to_enu[:, 3:].T
-xyz0 = xyz_to_enu[:, :3].T
-
-
-def tform_err(x):
-    R = cv2.Rodrigues(x[:3])[0]
-    xyz = np.dot(R, xyz0)
-
-    if x[3] < 0:
-        return 1e10
-
-    S = np.diag(np.ones(3)*x[3])
-
-    xyz = np.dot(S, xyz)
-
-    xyz[0] += x[4]
-    xyz[1] += x[5]
-    xyz[2] += x[6]
-
-    err = np.sqrt(np.mean((east_north - xyz)**2))
-    print(err)
-    return err
-
-
-# Solve for optimal transform
-x = np.hstack([(np.random.rand(3)*2 - 1)*np.pi, [1, 0, 0, 0]])
-x = minimize(tform_err, x).x
-
-T = np.identity(4)
-T[:3, :3] = np.dot(np.diag(np.ones(3)*x[3]), cv2.Rodrigues(x[:3])[0])
-T[:3, 3] = x[4:]
-
-pts_enu = {}
-c = []
-for key in pts_3d:
-    xyz = pts_3d[key].xyz
-    c.append(pts_3d[key].rgb)
-
-    if True:
-        xyz = np.dot(T, np.hstack([xyz, 1]))
-        xyz = xyz[:3]/xyz[3]
-
-    pts_enu[key] = xyz
-
-
-if True:
-    # Verify that the model is right-side up.
-    pts2 = np.array([_ for _ in pts
-                     if np.all(np.abs(_) < 100) and abs(_[2]) < 40])
-    pts2 = pts2.T
-
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    plt.plot(pts2[0], pts2[1], pts2[2], '.')
-    plt.xlabel('Easting (m)')
-    plt.ylabel('Northing (m)')
-
-
-# Compute ORB feature for each 3-D point in each image.
-orb = cv2.ORB_create(nfeatures=int(1e4), nlevels=10, scaleFactor=1.2)
-
-# feature is a dictionary that takes the image index and returns a list of
-# [3d_pt_index, descriptor]
-features = {}
-for image_num in images:
-    print('Processing image', image_num, 'of', len(images))
-    image = images[image_num]
-    img_fname = '%s/%s' % (image_dir, image.name)
-    img = cv2.imread(img_fname)
-
-    if False:
-        col, row = np.round(image.xys).astype(np.int).T
-        data = np.ones(len(row), dtype=np.uint8)
-        mask = csr_matrix((data, (row, col)), shape=img.shape[:2]).todense()
-        mask = cv2.dilate(mask, np.ones((5, 5), np.uint8), iterations=1)
-    else:
-        mask = None
-
-    kp, des = orb.detectAndCompute(img, mask)
-    kp_xy = np.array([_.pt for _ in kp])
-
-    features[image_num] = []
-
-    max_d = 5   # pixels
-    tree = spatial.KDTree(list(zip(kp_xy[:,0], kp_xy[:,1])))
-    d, ind = tree.query(image.xys, k=1, distance_upper_bound=max_d)
-
-    features[image_num] = [[pts_enu[image.point3D_ids[i]], des[ind[i]]]
-                           for i in range(len(d)) if d[i] < max_d]
-
-    # [image.xys[_] - np.array(kp[ind[_]].pt) for _ in range(len(d)) if d[_] < max_d]
-
-
-try:
-    os.makedirs(model_save_location)
-except OSError:
-    pass
-
-fname = '%s/features_per_image.p' % model_save_location
-with open(fname, 'wb') as handle:
-    pickle.dump(features, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-keys = images.keys()
-keys.sort()
-fname = '%s/source_image_list.txt' % model_save_location
-with open(fname, 'w') as f:
-    for key in keys:
-        f.write('%s %s\n' % (key, images[key].name))
-
-
-# Cluster descriptors to do a Bag-of-Words lookup of the nearest image.
-# sklearn doesn't support Hamming distance, so convert to binary vector.
-descriptors = []
-for image_num in features:
-    for el in features[image_num]:
-        descriptors.append(np.unpackbits(el[1]))
-
-descriptors = np.array(descriptors, np.float32)
-num_clusters = len(descriptors)/100
-num_clusters = 100
-clf = KMeans(n_clusters=num_clusters, n_init=1, random_state=0,
-             precompute_distances=True, verbose=5, n_jobs=10)
-kmeans = clf.fit(descriptors).cluster_centers_
-bow = kmeans.cluster_centers_
-#bow = np.array([np.packbits(_) for _ in np.round(bow).astype(np.bool)])
-
-tree = spatial.KDTree(bow)
-
-
-def get_hist(desc):
-    hist = np.zeros(num_clusters, np.int)
-    inds = tree.query(np.array(desc), k=1)[1]
-    hist = np.zeros(num_clusters, np.int)
-    for ind in inds:
-        hist[ind] += 1
-
-    hist = hist.astype(np.float32)
-    hist /= np.linalg.norm(hist)
-    return hist
-
-
-bow_hist = []
-for image_num in features:
-    print('Processing image number:', image_num)
-    desc = []
-    for el in features[image_num]:
-        desc.append(np.unpackbits(el[1]))
-
-    if len(desc) > 0:
-        hist = get_hist(desc)
-    else:
-        hist = np.zeros(num_clusters, np.int)
-
-    bow_hist.append(hist)
-
-bow_hist = np.array(bow_hist)
-
-
-fname = '%s/bow.p' % model_save_location
-with open(fname, 'wb') as handle:
-    pickle.dump([bow, bow_hist], handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-
-
-# Read in test image.
-img_fname = '/host_filesystem/home/mattb/threatx_ws/config/camera_models/amcrest/am1/ref_image.png'
-
-orb = cv2.ORB_create(nfeatures=int(1e4), nlevels=20, scaleFactor=1.2)
-img = cv2.imread(img_fname)
-kp, des = orb.detectAndCompute(img, None)
-des = np.array([np.unpackbits(_) for _ in des])
-hist = get_hist(des)
-
-d = np.dot(bow_hist, hist)
-ind = np.argsort(d)[::-1]
-
-keys = images.keys();   keys.sort()
-img_fname = '%s/%s' % (image_dir, images[keys[ind[1]]].name)
-img_ref = cv2.imread(img_fname)
-
-plt.subplot(1, 2, 1)
-plt.imshow(img)
-plt.subplot(1, 2, 2)
-plt.imshow(img_ref)
-
-
-
-
-
-
-
-
-img_fname = '/host_filesystem/home/mattb/threatx_ws/config/camera_models/amcrest/am1/ref_image.png'
-orb = cv2.ORB_create(nfeatures=int(1e4), nlevels=30, scaleFactor=1.2)
-img = cv2.imread(img_fname)
-kp, des = orb.detectAndCompute(img, None)
 
 ind = 341
 img_fname = '%s/%s' % (image_dir, images[ind].name)
