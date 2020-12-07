@@ -34,7 +34,6 @@ import numpy as np
 import os
 import collections
 import struct
-import transformations
 
 from colmap_processing.camera_models import StandardCamera
 from colmap_processing.platform_pose import PlatformPoseInterp
@@ -325,12 +324,19 @@ def standard_cameras_from_colmap(cameras, images=None):
             R = qvec2rotmat(image.qvec)
             pos = -np.dot(R.T, image.tvec)
         
-            # The qvec used by Colmap is a (w, x, y, z) quaternion 
-            # representing the rotation of a vector defined in the world 
-            # coordinate system into the camera coordinate system. However, 
-            # the 'camera_models' module assumes (x, y, z, w) quaternions 
-            # representing a coordinate system rotation.
-            quat = transformations.quaternion_inverse(image.qvec)
+            # The qvec used by Colmap is a (w, x, y, z) quaternion
+            # representing the rotation of a vector defined in the world
+            # coordinate system into the camera coordinate system. However,
+            # the 'camera_models' module assumes (x, y, z, w) quaternions
+            # representing a coordinate system rotation. Also, the quaternion
+            # used by 'camera_models' represents a coordinate system rotation
+            # versus the coordinate system transform of Colmap's convention,
+            # so we need an inverse.
+            
+            #quat = transformations.quaternion_inverse(image.qvec)
+            quat = image.qvec / np.linalg.norm(image.qvec)
+            quat[0] = -quat[0]
+            
             quat = [quat[1], quat[2], quat[3], quat[0]]
         
             t = image_id
