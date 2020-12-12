@@ -57,7 +57,12 @@ except ImportError:
 
 # Repository imports.
 from colmap_processing.image_renderer import stitch_images
-import transformations
+
+try:
+    import transformations
+except ModuleNotFoundError:
+    pass
+
 from colmap_processing.platform_pose import PlatformPoseFixed
 from colmap_processing.geo_conversions import enu_to_llh, llh_to_enu
 import colmap_processing.dp as dp
