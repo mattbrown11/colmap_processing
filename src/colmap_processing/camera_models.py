@@ -312,7 +312,7 @@ def ray_intersect_plane(plane_point, plane_normal, ray_pos, ray_dir,
     psi[:, ndotu < epsilon] = np.nan
 
     plane_point = np.atleast_2d(plane_point)
-    plane_point.shape = (3, 1)
+    plane_point = np.reshape(plane_point, (3, 1))
     w = ray_pos - plane_point
     si = -np.dot(plane_normal, w) / ndotu
     Psi = w + si * ray_dir + plane_point
@@ -560,7 +560,7 @@ class Camera(object):
         else:
             was_1d = False
             points = np.array(points)
-            points.shape = (2,-1)
+            points = np.reshape(points, (2,-1))
 
         llh = []
         geo_cov = []
@@ -1044,7 +1044,7 @@ class StandardCamera(Camera):
         points = np.array(points, dtype=np.float64)
         if points.ndim == 1:
             points = np.atleast_2d(points).T
-            points.shape = (2,-1)
+            points = np.reshape(points, (2,-1))
 
         if t is None:
             t = time.time()
@@ -1256,7 +1256,7 @@ class DepthCamera(StandardCamera):
 
         """
         points = np.atleast_2d(points)
-        points.shape = (2,-1)
+        points = np.reshape(points, (2,-1))
         ray_pos, ray_dir = self.unproject(points, t=t, normalize_ray_dir=False)
 
         for i in range(points.shape[1]):
@@ -1530,7 +1530,7 @@ class GeoStaticCamera(DepthCamera):
         points = np.array(points, dtype=np.float64)
         if points.ndim == 1:
             points = np.atleast_2d(points).T
-            points.shape = (2,-1)
+            points = np.reshape(points, (2,-1))
 
         # Unproject rays into the camera coordinate system.
         ray_dir = np.ones((3,points.shape[1]), dtype=points.dtype)
