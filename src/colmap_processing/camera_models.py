@@ -345,13 +345,6 @@ class Camera(object):
         :param height: Height of the image provided by the imaging sensor,
         :type height: int
 
-        :param image_topic: The topic that the image is published on.
-        :type image_topic: str | None
-
-        :param frame_id: Frame ID. If set to None, the fully resolved topic
-            name wil be used.
-        :type frame_id: str | None
-
         :param platform_pose_provider: Object that returns the state of the
             navigation coordinate system as a function of time. If None is
             passed, the navigation coordinate system will always have
@@ -828,11 +821,9 @@ class StandardCamera(Camera):
 
         cam_quat = calib['camera_quaternion']
         cam_pos = calib['camera_position']
-        image_topic = calib['image_topic']
-        frame_id = calib['frame_id']
 
-        return cls(width, height, K, dist, cam_pos, cam_quat, image_topic,
-                   frame_id, platform_pose_provider)
+        return cls(width, height, K, dist, cam_pos, cam_quat, 
+                   platform_pose_provider)
 
     def save_to_file(self, filename):
         """See base class Camera documentation.
@@ -880,12 +871,6 @@ class StandardCamera(Camera):
                              'system.\n',
                              'camera_position: ',to_str(self.cam_pos),
                              '\n\n']))
-
-            f.write('# Topic on which this camera\'s image is published.\n')
-            f.write(''.join(['image_topic: ',self.image_topic,'\n\n']))
-
-            f.write('# The frame_id embedded in the published image header.\n')
-            f.write(''.join(['frame_id: ',self.frame_id]))
 
     @property
     def K(self):
@@ -1123,12 +1108,9 @@ class DepthCamera(StandardCamera):
 
         cam_quat = calib['camera_quaternion']
         cam_pos = calib['camera_position']
-        image_topic = calib['image_topic']
-        depth_topic = calib['depth_topic']
-        frame_id = calib['frame_id']
 
-        return cls(width, height, K, dist, cam_pos, cam_quat, image_topic,
-                   depth_topic, frame_id, platform_pose_provider)
+        return cls(width, height, K, dist, cam_pos, cam_quat,
+                   platform_pose_provider)
 
     def save_to_file(self, filename, save_depth_viz=True):
         """See base class Camera documentation.
@@ -1387,8 +1369,6 @@ class GeoStaticCamera(DepthCamera):
         latitude = calib['latitude']
         longitude = calib['longitude']
         altitude = calib['altitude']
-        image_topic = calib['image_topic']
-        frame_id = calib['frame_id']
 
         depth_map_fname = '%s_depth_map.tif' % os.path.splitext(filename)[0]
         try:
@@ -1397,7 +1377,7 @@ class GeoStaticCamera(DepthCamera):
             depth_map = None
 
         return cls(width, height, K, dist, depth_map, latitude, longitude,
-                   altitude, R, image_topic, frame_id)
+                   altitude, R)
 
     def save_to_file(self, filename):
         """See base class Camera documentation.
@@ -1447,12 +1427,6 @@ class GeoStaticCamera(DepthCamera):
                              'latitude: %0.10f\n' % self.latitude,
                              'longitude: %0.10f\n' % self.longitude,
                              'altitude: %0.10f' % self.altitude,'\n\n']))
-
-            f.write('# Topic on which this camera\'s image is published\n')
-            f.write(''.join(['image_topic: ',str(self.image_topic),'\n\n']))
-
-            f.write('# The frame_id embedded in the published image header.\n')
-            f.write(''.join(['frame_id: ',str(self.frame_id)]))
 
         if self.depth_map is not None:
             im = PIL.Image.fromarray(self.depth_map, mode='F') # float32
