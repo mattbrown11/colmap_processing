@@ -2,13 +2,15 @@ import glob
 import shutil
 import time
 
-snap_shot_dir = '/media/root/LaCie/AP_Hill_2020_Oct/DP3/colmap/snapshots/*'
+snap_shot_dir = '/mnt/data10tb/kamera_fl8/colmap_ir/snapshots/*'
 num_to_keep = 10
 
 while True:
     dirs = glob.glob(snap_shot_dir)
     dirs = sorted(dirs)
+    print('Found %i subdirectories' % len(dirs))
     for d in dirs[:-num_to_keep]:
+        print('Deleting \'%s\'' % d)
         shutil.rmtree(d)
         
     time.sleep(10)
