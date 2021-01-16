@@ -57,54 +57,58 @@ except ImportError:
 
 # Repository imports.
 from colmap_processing.image_renderer import stitch_images
-
-try:
-    import transformations
-except ModuleNotFoundError:
-    pass
-
 from colmap_processing.platform_pose import PlatformPoseFixed
 from colmap_processing.geo_conversions import enu_to_llh, llh_to_enu
 import colmap_processing.dp as dp
 
 
 # -----------------------------------------------------------------------------
-# transformations assumes a (w, x, y, z) quaterion, but the rest of the module
-# was originally written to comply with ROS tf2 operations, which assume
-# (x, y, z, w) quaternions. So, these functions manage the conversions.
-# TODO, update the constituent methods to directly use the transformations
-# package to remove these extra steps.
+try:
+    # Use ROS tf.transformations for rotation operations.
+    from tf.transformations import euler_from_quaternion, quaternion_multiply, \
+        quaternion_from_matrix, quaternion_matrix, quaternion_from_euler, \
+        quaternion_inverse, euler_matrix
+except ImportError:
+    # Instead, use the pip installed transformations.py, which isn't compatible
+    # with Python 2. However, this requires some modifications to the
+    # formatting.
 
-def quat_xyzw_to_wxyz(quat):
-    return quat[3], quat[0], quat[1], quat[2]
+    # transformations assumes a (w, x, y, z) quaterion, but the rest of the module
+    # was originally written to comply with ROS tf2 operations, which assume
+    # (x, y, z, w) quaternions. So, these functions manage the conversions.
+    # TODO, update the constituent methods to directly use the transformations
+    # package to remove these extra steps.
 
-def quat_wxyz_to_xyzw(quat):
-    return quat[1], quat[2], quat[3], quat[0]
+    def quat_xyzw_to_wxyz(quat):
+        return quat[3], quat[0], quat[1], quat[2]
 
-def quaternion_matrix(quat):
-    return transformations.quaternion_matrix(quat_xyzw_to_wxyz(quat))
+    def quat_wxyz_to_xyzw(quat):
+        return quat[1], quat[2], quat[3], quat[0]
 
-def quaternion_multiply(quat1, quat2):
-    quat1 = quat_xyzw_to_wxyz(quat1)
-    quat2 = quat_xyzw_to_wxyz(quat2)
-    quat = transformations.quaternion_multiply(quat1, quat2)
-    return quat_wxyz_to_xyzw(quat)
+    def quaternion_matrix(quat):
+        return transformations.quaternion_matrix(quat_xyzw_to_wxyz(quat))
 
-def quaternion_from_matrix(R):
-    if R.shape != (4, 4):
-        R_ = R
-        R = np.identity(4)
-        R[:3, :3] = R_
+    def quaternion_multiply(quat1, quat2):
+        quat1 = quat_xyzw_to_wxyz(quat1)
+        quat2 = quat_xyzw_to_wxyz(quat2)
+        quat = transformations.quaternion_multiply(quat1, quat2)
+        return quat_wxyz_to_xyzw(quat)
 
-    return quat_wxyz_to_xyzw(transformations.quaternion_from_matrix(R))
+    def quaternion_from_matrix(R):
+        if R.shape != (4, 4):
+            R_ = R
+            R = np.identity(4)
+            R[:3, :3] = R_
 
-def quaternion_from_euler(xyz):
-    return quat_wxyz_to_xyzw(transformations.quaternion_from_euler(xyz))
+        return quat_wxyz_to_xyzw(transformations.quaternion_from_matrix(R))
 
-def quaternion_inverse(quat):
-    quat = quat_xyzw_to_wxyz(quat)
-    quat = transformations.quaternion_inverse(quat)
-    return quat_wxyz_to_xyzw(quat)
+    def quaternion_from_euler(xyz):
+        return quat_wxyz_to_xyzw(transformations.quaternion_from_euler(xyz))
+
+    def quaternion_inverse(quat):
+        quat = quat_xyzw_to_wxyz(quat)
+        quat = transformations.quaternion_inverse(quat)
+        return quat_wxyz_to_xyzw(quat)
 # -----------------------------------------------------------------------------
 
 
@@ -308,7 +312,7 @@ def ray_intersect_plane(plane_point, plane_normal, ray_pos, ray_dir,
     psi[:, ndotu < epsilon] = np.nan
 
     plane_point = np.atleast_2d(plane_point)
-    plane_point.shape = (3, 1)
+    plane_point = np.reshape(plane_point, (3, 1))
     w = ray_pos - plane_point
     si = -np.dot(plane_normal, w) / ndotu
     Psi = w + si * ray_dir + plane_point
@@ -556,7 +560,7 @@ class Camera(object):
         else:
             was_1d = False
             points = np.array(points)
-            points.shape = (2,-1)
+            points = np.reshape(points, (2,-1))
 
         llh = []
         geo_cov = []
@@ -1040,7 +1044,7 @@ class StandardCamera(Camera):
         points = np.array(points, dtype=np.float64)
         if points.ndim == 1:
             points = np.atleast_2d(points).T
-            points.shape = (2,-1)
+            points = np.reshape(points, (2,-1))
 
         if t is None:
             t = time.time()
@@ -1252,7 +1256,7 @@ class DepthCamera(StandardCamera):
 
         """
         points = np.atleast_2d(points)
-        points.shape = (2,-1)
+        points = np.reshape(points, (2,-1))
         ray_pos, ray_dir = self.unproject(points, t=t, normalize_ray_dir=False)
 
         for i in range(points.shape[1]):
@@ -1526,7 +1530,7 @@ class GeoStaticCamera(DepthCamera):
         points = np.array(points, dtype=np.float64)
         if points.ndim == 1:
             points = np.atleast_2d(points).T
-            points.shape = (2,-1)
+            points = np.reshape(points, (2,-1))
 
         # Unproject rays into the camera coordinate system.
         ray_dir = np.ones((3,points.shape[1]), dtype=points.dtype)
