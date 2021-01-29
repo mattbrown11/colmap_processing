@@ -34,27 +34,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 from __future__ import division, print_function
 import numpy as np
-import csv
-import copy
-import glob
-import os
-import cv2
-import vtk
-from vtk.util import numpy_support
-import shapely
-from shapely.ops import cascaded_union
-import matplotlib
-import matplotlib.pyplot as plt
-from matplotlib.patches import Polygon
-from matplotlib.collections import PatchCollection
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-import PIL
-import yaml
-
-# Colmap Processing imports.
-from colmap_processing.geo_conversions import enu_to_llh, llh_to_enu, \
-    rmat_ecef_enu, rmat_enu_ecef
+import os, cv2, yaml, PIL
 
 
 def to_str(v):
@@ -93,8 +73,8 @@ def load_static_camera_from_file(filename):
         latitude = calib['latitude']
         longitude = calib['longitude']
         altitude = calib['altitude']
-        image_topic = calib['image_topic']
-        frame_id = calib['frame_id']
+#         image_topic = calib['image_topic']
+#         frame_id = calib['frame_id']
 
         depth_map_fname = '%s_depth_map.tif' % os.path.splitext(filename)[0]
         try:
