@@ -58,8 +58,11 @@ def process(video_path, image_prefix, output_dir, opt_flow_thresh=25,
     # Delete redundant frames.
     img_fnames = glob.glob('%s/%s_*.png' % (output_dir, image_prefix))
     img_fnames = natsort.natsorted((img_fnames))
-
-    img1 = cv2.cvtColor(cv2.imread(img_fnames[0]), cv2.COLOR_BGR2GRAY)
+    
+    img1 = cv2.imread(img_fnames[0])
+    
+    if img1.ndim == 3:
+        img1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
 
     for i in range(1, len(img_fnames)):
         try:
@@ -87,8 +90,17 @@ def process(video_path, image_prefix, output_dir, opt_flow_thresh=25,
                                                  **lk_params)
 
         delta = np.sqrt(np.sum((pts - pts2)**2, 1))
-        print('Optical flow is', np.percentile(delta, 90), 'pixels')
-        if np.percentile(delta, 90) > opt_flow_thresh:
+        
+        # Only consider valid points.
+        delta = delta[st.ravel().astype(np.bool)]
+        
+        new_key_frame = np.mean(st) < 0.5
+        
+        if ~new_key_frame:
+            print('Optical flow is', np.percentile(delta, 90), 'pixels')
+            new_key_frame = np.percentile(delta, 90) > opt_flow_thresh        
+        
+        if new_key_frame:
             img1 = img2
         else:
             print('Deleting', img_fnames[i])

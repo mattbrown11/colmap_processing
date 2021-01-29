@@ -449,7 +449,7 @@ class CameraPanTilt(Camera):
 
 def render_distored_image(width, height, K, dist, cam_pos, R, model_reader,
                           return_depth=True, monitor_resolution=(1920, 1080),
-                          clipping_range=[1, 2000]):
+                          clipping_range=[1, 2000], fill_holes=True):
     """Render a view from a camera with distortion.
 
     """
@@ -511,7 +511,7 @@ def render_distored_image(width, height, K, dist, cam_pos, R, model_reader,
 
     #img = cv2.resize(img, tuple(render_resolution))
 
-    if return_depth:
+    if return_depth or fill_holes:
         ret = vtk_camera.unproject_view(model_reader,
                                         clipping_range=clipping_range)
         E, N, U, depth = ret
@@ -523,7 +523,14 @@ def render_distored_image(width, height, K, dist, cam_pos, R, model_reader,
 
     # Warp the rendered view back to the original, possibly distorted, camera
     # view.
-    X, Y = np.meshgrid(np.arange(width) + 0.5, np.arange(height) + 0.5)
+
+    # These are the pixel coordinates for the centers of all the pixels in the
+    # image of size img.shape, which we will scale up to the pixel coordinates
+    # for those same locations in the image of size (height, width).
+    x = (np.arange(img.shape[1]) + 0.5)*width/img.shape[1]
+    y = (np.arange(img.shape[0]) + 0.5)*height/img.shape[0]
+
+    X, Y = np.meshgrid(x, y)
     points = np.vstack([X.ravel(), Y.ravel()])
     ray_dir = cv2.undistortPoints(np.expand_dims(points.T, 0), K, dist, None)
     ray_dir = np.squeeze(ray_dir).astype(np.float32).T
@@ -533,9 +540,11 @@ def render_distored_image(width, height, K, dist, cam_pos, R, model_reader,
     points2 = np.squeeze(points2, 1).T
     X2 = np.reshape(points2[0], X.shape).astype(np.float32)
     Y2 = np.reshape(points2[1], Y.shape).astype(np.float32)
-    img = cv2.remap(img, X2, Y2, cv2.INTER_LINEAR)
+    X2 = cv2.resize(X2, (width, height), cv2.INTER_LINEAR)
+    Y2 = cv2.resize(Y2, (width, height), cv2.INTER_LINEAR)
+    img = cv2.remap(img, X2, Y2, cv2.INTER_CUBIC)
 
-    if return_depth:
+    if return_depth or fill_holes:
         X = cv2.remap(E, X2, Y2, cv2.INTER_LINEAR)
         Y = cv2.remap(N, X2, Y2, cv2.INTER_LINEAR)
         Z = cv2.remap(U, X2, Y2, cv2.INTER_LINEAR)
@@ -543,29 +552,33 @@ def render_distored_image(width, height, K, dist, cam_pos, R, model_reader,
 
     # ------------------------------------------------------------------------
     # Identify holes in the model and then inpaint them.
-    hole_mask = depth > clipping_range[-1] - 0.1
+    if fill_holes:
+        hole_mask = depth > clipping_range[-1] - 0.1
 
-    output = cv2.connectedComponentsWithStats(hole_mask.astype(np.uint8),
-                                              8, cv2.CV_32S)
-    labels = output[1]
+        output = cv2.connectedComponentsWithStats(hole_mask.astype(np.uint8),
+                                                  8, cv2.CV_32S)
+        labels = output[1]
 
-    # Remove components that touch outer boundary.
-    edge_labels = set(labels[:, 0])
-    edge_labels = edge_labels.union(set(labels[0, :]))
-    edge_labels = edge_labels.union(set(labels[:, -1]))
-    edge_labels = edge_labels.union(set(labels[-1, :]))
+        # Remove components that touch outer boundary.
+        edge_labels = set(labels[:, 0])
+        edge_labels = edge_labels.union(set(labels[0, :]))
+        edge_labels = edge_labels.union(set(labels[:, -1]))
+        edge_labels = edge_labels.union(set(labels[-1, :]))
 
-    for i in edge_labels:
-        labels[labels == i] = 0
+        for i in edge_labels:
+            labels[labels == i] = 0
 
-    mask = (labels > 0).astype(np.uint8)
-    img = cv2.inpaint(img, mask, 3, cv2.INPAINT_NS)
+        mask = (labels > 0).astype(np.uint8)
+        img = cv2.inpaint(img, mask, 3, cv2.INPAINT_NS)
+
+        if return_depth:
+            X = cv2.inpaint(X.astype(np.float32), mask, 3, cv2.INPAINT_NS)
+            Y = cv2.inpaint(Y.astype(np.float32), mask, 3, cv2.INPAINT_NS)
+            Z = cv2.inpaint(Z.astype(np.float32), mask, 3, cv2.INPAINT_NS)
+            depth = cv2.inpaint(depth.astype(np.float32), mask, 3,
+                                cv2.INPAINT_NS)
 
     if return_depth:
-        X = cv2.inpaint(X.astype(np.float32), mask, 3, cv2.INPAINT_NS)
-        Y = cv2.inpaint(Y.astype(np.float32), mask, 3, cv2.INPAINT_NS)
-        Z = cv2.inpaint(Z.astype(np.float32), mask, 3, cv2.INPAINT_NS)
-        depth = cv2.inpaint(depth.astype(np.float32), mask, 3, cv2.INPAINT_NS)
         return img, depth, X, Y, Z
     else:
         return img

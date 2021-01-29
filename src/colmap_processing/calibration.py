@@ -63,6 +63,40 @@ import colmap_processing.dp as dp
 from colmap_processing.camera_models import ray_intersect_plane
 
 
+def horn(P, Q):
+    """
+    :param P: Initial point cloud.
+    :type P: N x num_dim
+    
+    :param Q: Destination point cloud.
+    :type Q: N x num_dim
+        
+    """
+    if P.shape != Q.shape:
+        print("Matrices P and Q must be of the same dimensionality")
+
+    P0 = np.mean(P, axis=1)
+    Q0 = np.mean(Q, axis=1)
+    A = P - np.outer(P0, np.ones(P.shape[1]))
+    B = Q - np.outer(Q0, np.ones(Q.shape[1]))
+    s = np.sqrt(np.mean(B.ravel()**2)) / np.sqrt(np.mean(A.ravel()**2))
+    
+    # Apply scale.
+    A = s*A
+    P0 = P0*s
+    
+    C = np.dot(A, B.transpose())
+    U, S, V = np.linalg.svd(C)
+    R = np.dot(V.transpose(), U.transpose())
+    L = np.eye(3)
+    if np.linalg.det(R) < 0:
+        L[2][2] *= -1
+
+    R = np.dot(V.transpose(), np.dot(L, U.transpose()))
+    t = np.dot(-R, P0) + Q0
+    return (s, R, t)
+
+
 def fit_plane(xyz):
     """Check whether results from cv2.calibrateCamera are valid.
 
