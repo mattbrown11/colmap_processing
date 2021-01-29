@@ -57,49 +57,58 @@ except ImportError:
 
 # Repository imports.
 from colmap_processing.image_renderer import stitch_images
-import transformations
 from colmap_processing.platform_pose import PlatformPoseFixed
 from colmap_processing.geo_conversions import enu_to_llh, llh_to_enu
 import colmap_processing.dp as dp
 
 
 # -----------------------------------------------------------------------------
-# transformations assumes a (w, x, y, z) quaterion, but the rest of the module
-# was originally written to comply with ROS tf2 operations, which assume
-# (x, y, z, w) quaternions. So, these functions manage the conversions.
-# TODO, update the constituent methods to directly use the transformations
-# package to remove these extra steps.
+try:
+    # Use ROS tf.transformations for rotation operations.
+    from tf.transformations import euler_from_quaternion, quaternion_multiply, \
+        quaternion_from_matrix, quaternion_matrix, quaternion_from_euler, \
+        quaternion_inverse, euler_matrix
+except ImportError:
+    # Instead, use the pip installed transformations.py, which isn't compatible
+    # with Python 2. However, this requires some modifications to the
+    # formatting.
 
-def quat_xyzw_to_wxyz(quat):
-    return quat[3], quat[0], quat[1], quat[2]
+    # transformations assumes a (w, x, y, z) quaterion, but the rest of the module
+    # was originally written to comply with ROS tf2 operations, which assume
+    # (x, y, z, w) quaternions. So, these functions manage the conversions.
+    # TODO, update the constituent methods to directly use the transformations
+    # package to remove these extra steps.
 
-def quat_wxyz_to_xyzw(quat):
-    return quat[1], quat[2], quat[3], quat[0]
+    def quat_xyzw_to_wxyz(quat):
+        return quat[3], quat[0], quat[1], quat[2]
 
-def quaternion_matrix(quat):
-    return transformations.quaternion_matrix(quat_xyzw_to_wxyz(quat))
+    def quat_wxyz_to_xyzw(quat):
+        return quat[1], quat[2], quat[3], quat[0]
 
-def quaternion_multiply(quat1, quat2):
-    quat1 = quat_xyzw_to_wxyz(quat1)
-    quat2 = quat_xyzw_to_wxyz(quat2)
-    quat = transformations.quaternion_multiply(quat1, quat2)
-    return quat_wxyz_to_xyzw(quat)
+    def quaternion_matrix(quat):
+        return transformations.quaternion_matrix(quat_xyzw_to_wxyz(quat))
 
-def quaternion_from_matrix(R):
-    if R.shape != (4, 4):
-        R_ = R
-        R = np.identity(4)
-        R[:3, :3] = R_
+    def quaternion_multiply(quat1, quat2):
+        quat1 = quat_xyzw_to_wxyz(quat1)
+        quat2 = quat_xyzw_to_wxyz(quat2)
+        quat = transformations.quaternion_multiply(quat1, quat2)
+        return quat_wxyz_to_xyzw(quat)
 
-    return quat_wxyz_to_xyzw(transformations.quaternion_from_matrix(R))
+    def quaternion_from_matrix(R):
+        if R.shape != (4, 4):
+            R_ = R
+            R = np.identity(4)
+            R[:3, :3] = R_
 
-def quaternion_from_euler(xyz):
-    return quat_wxyz_to_xyzw(transformations.quaternion_from_euler(xyz))
+        return quat_wxyz_to_xyzw(transformations.quaternion_from_matrix(R))
 
-def quaternion_inverse(quat):
-    quat = quat_xyzw_to_wxyz(quat)
-    quat = transformations.quaternion_inverse(quat)
-    return quat_wxyz_to_xyzw(quat)
+    def quaternion_from_euler(xyz):
+        return quat_wxyz_to_xyzw(transformations.quaternion_from_euler(xyz))
+
+    def quaternion_inverse(quat):
+        quat = quat_xyzw_to_wxyz(quat)
+        quat = transformations.quaternion_inverse(quat)
+        return quat_wxyz_to_xyzw(quat)
 # -----------------------------------------------------------------------------
 
 
@@ -303,7 +312,7 @@ def ray_intersect_plane(plane_point, plane_normal, ray_pos, ray_dir,
     psi[:, ndotu < epsilon] = np.nan
 
     plane_point = np.atleast_2d(plane_point)
-    plane_point.shape = (3, 1)
+    plane_point = np.reshape(plane_point, (3, 1))
     w = ray_pos - plane_point
     si = -np.dot(plane_normal, w) / ndotu
     Psi = w + si * ray_dir + plane_point
@@ -335,13 +344,6 @@ class Camera(object):
 
         :param height: Height of the image provided by the imaging sensor,
         :type height: int
-
-        :param image_topic: The topic that the image is published on.
-        :type image_topic: str | None
-
-        :param frame_id: Frame ID. If set to None, the fully resolved topic
-            name wil be used.
-        :type frame_id: str | None
 
         :param platform_pose_provider: Object that returns the state of the
             navigation coordinate system as a function of time. If None is
@@ -551,7 +553,7 @@ class Camera(object):
         else:
             was_1d = False
             points = np.array(points)
-            points.shape = (2,-1)
+            points = np.reshape(points, (2,-1))
 
         llh = []
         geo_cov = []
@@ -819,11 +821,9 @@ class StandardCamera(Camera):
 
         cam_quat = calib['camera_quaternion']
         cam_pos = calib['camera_position']
-        image_topic = calib['image_topic']
-        frame_id = calib['frame_id']
 
-        return cls(width, height, K, dist, cam_pos, cam_quat, image_topic,
-                   frame_id, platform_pose_provider)
+        return cls(width, height, K, dist, cam_pos, cam_quat, 
+                   platform_pose_provider)
 
     def save_to_file(self, filename):
         """See base class Camera documentation.
@@ -871,12 +871,6 @@ class StandardCamera(Camera):
                              'system.\n',
                              'camera_position: ',to_str(self.cam_pos),
                              '\n\n']))
-
-            f.write('# Topic on which this camera\'s image is published.\n')
-            f.write(''.join(['image_topic: ',self.image_topic,'\n\n']))
-
-            f.write('# The frame_id embedded in the published image header.\n')
-            f.write(''.join(['frame_id: ',self.frame_id]))
 
     @property
     def K(self):
@@ -1035,7 +1029,7 @@ class StandardCamera(Camera):
         points = np.array(points, dtype=np.float64)
         if points.ndim == 1:
             points = np.atleast_2d(points).T
-            points.shape = (2,-1)
+            points = np.reshape(points, (2,-1))
 
         if t is None:
             t = time.time()
@@ -1048,7 +1042,7 @@ class StandardCamera(Camera):
         ray_dir = np.ones((3,points.shape[1]), dtype=points.dtype)
         ray_dir0 = cv2.undistortPoints(np.expand_dims(points.T, 0),
                                        self._K, self._dist, R=None)
-        ray_dir[:2] = np.squeeze(ray_dir0).T
+        ray_dir[:2] = np.squeeze(ray_dir0, 0).T
 
         # Rotate rays into the navigation coordinate system.
         ray_dir = np.dot(quaternion_matrix(self._cam_quat)[:3,:3], ray_dir)
@@ -1114,12 +1108,9 @@ class DepthCamera(StandardCamera):
 
         cam_quat = calib['camera_quaternion']
         cam_pos = calib['camera_position']
-        image_topic = calib['image_topic']
-        depth_topic = calib['depth_topic']
-        frame_id = calib['frame_id']
 
-        return cls(width, height, K, dist, cam_pos, cam_quat, image_topic,
-                   depth_topic, frame_id, platform_pose_provider)
+        return cls(width, height, K, dist, cam_pos, cam_quat,
+                   platform_pose_provider)
 
     def save_to_file(self, filename, save_depth_viz=True):
         """See base class Camera documentation.
@@ -1247,7 +1238,7 @@ class DepthCamera(StandardCamera):
 
         """
         points = np.atleast_2d(points)
-        points.shape = (2,-1)
+        points = np.reshape(points, (2,-1))
         ray_pos, ray_dir = self.unproject(points, t=t, normalize_ray_dir=False)
 
         for i in range(points.shape[1]):
@@ -1378,8 +1369,6 @@ class GeoStaticCamera(DepthCamera):
         latitude = calib['latitude']
         longitude = calib['longitude']
         altitude = calib['altitude']
-        image_topic = calib['image_topic']
-        frame_id = calib['frame_id']
 
         depth_map_fname = '%s_depth_map.tif' % os.path.splitext(filename)[0]
         try:
@@ -1388,7 +1377,7 @@ class GeoStaticCamera(DepthCamera):
             depth_map = None
 
         return cls(width, height, K, dist, depth_map, latitude, longitude,
-                   altitude, R, image_topic, frame_id)
+                   altitude, R)
 
     def save_to_file(self, filename):
         """See base class Camera documentation.
@@ -1438,12 +1427,6 @@ class GeoStaticCamera(DepthCamera):
                              'latitude: %0.10f\n' % self.latitude,
                              'longitude: %0.10f\n' % self.longitude,
                              'altitude: %0.10f' % self.altitude,'\n\n']))
-
-            f.write('# Topic on which this camera\'s image is published\n')
-            f.write(''.join(['image_topic: ',str(self.image_topic),'\n\n']))
-
-            f.write('# The frame_id embedded in the published image header.\n')
-            f.write(''.join(['frame_id: ',str(self.frame_id)]))
 
         if self.depth_map is not None:
             im = PIL.Image.fromarray(self.depth_map, mode='F') # float32
@@ -1521,7 +1504,7 @@ class GeoStaticCamera(DepthCamera):
         points = np.array(points, dtype=np.float64)
         if points.ndim == 1:
             points = np.atleast_2d(points).T
-            points.shape = (2,-1)
+            points = np.reshape(points, (2,-1))
 
         # Unproject rays into the camera coordinate system.
         ray_dir = np.ones((3,points.shape[1]), dtype=points.dtype)
