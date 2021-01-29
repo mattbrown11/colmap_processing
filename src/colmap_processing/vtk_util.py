@@ -34,21 +34,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 from __future__ import division, print_function
 import numpy as np
-import csv
-import copy
-import glob
-import os
-import cv2
-import vtk
+import copy, os, cv2, vtk
 from vtk.util import numpy_support
-import shapely
-from shapely.ops import cascaded_union
-import matplotlib
 import matplotlib.pyplot as plt
-from matplotlib.patches import Polygon
-from matplotlib.collections import PatchCollection
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
+# from matplotlib.patches import Polygon
+# from matplotlib.collections import PatchCollection
+# from mpl_toolkits.mplot3d import Axes3D
 
 
 class Camera(object):
@@ -251,7 +242,7 @@ class Camera(object):
         light.SetPosition(light_pos)
         renderer.AddLight(light)
 
-         # RenderWindow
+        # RenderWindow
         renderWindow = vtk.vtkRenderWindow()
         renderWindow.AddRenderer(renderer)
         renderWindow.SetSize(self.res_x, self.res_y)
@@ -263,7 +254,7 @@ class Camera(object):
         rgbfilter.Update()
         dims = rgbfilter.GetOutput().GetDimensions()
         npdims = [dims[1],dims[0],3]
-        image = vtk.util.numpy_support.vtk_to_numpy(rgbfilter.GetOutput().GetPointData().GetScalars()).reshape(npdims)
+        image = numpy_support.vtk_to_numpy(rgbfilter.GetOutput().GetPointData().GetScalars()).reshape(npdims)
         image = np.flipud(image)
 
         del renderer, renderWindow, rgbfilter
@@ -315,7 +306,7 @@ class Camera(object):
         renderer.SetActiveCamera(self.vtk_camera)
         renderer.AddActor(actor)
 
-         # RenderWindow
+        # RenderWindow
         renderWindow = vtk.vtkRenderWindow()
         renderWindow.AddRenderer(renderer)
         renderWindow.SetSize(self.res_x, self.res_y)
@@ -329,7 +320,7 @@ class Camera(object):
         # transform zbuffer to numpy array
         dims = zfilter.GetOutput().GetDimensions()
         npdims = [dims[1],dims[0]]
-        array = vtk.util.numpy_support.vtk_to_numpy(zfilter.GetOutput().GetPointData().GetScalars()).reshape(npdims)
+        array = numpy_support.vtk_to_numpy(zfilter.GetOutput().GetPointData().GetScalars()).reshape(npdims)
         array = np.flipud(array)
 
         if return_image:
@@ -367,7 +358,7 @@ class Camera(object):
             # Render image
             dims = rgbfilter.GetOutput().GetDimensions()
             npdims = [dims[1], dims[0], 3]
-            image = vtk.util.numpy_support.vtk_to_numpy(rgbfilter.GetOutput().GetPointData().GetScalars()).reshape(npdims)
+            image = numpy_support.vtk_to_numpy(rgbfilter.GetOutput().GetPointData().GetScalars()).reshape(npdims)
             del rgbfilter
             image = np.flipud(image)
             return X, Y, Z, depth, image
