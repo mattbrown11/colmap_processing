@@ -72,6 +72,7 @@ except ImportError:
     # Instead, use the pip installed transformations.py, which isn't compatible
     # with Python 2. However, this requires some modifications to the
     # formatting.
+    import transformations
 
     # transformations assumes a (w, x, y, z) quaterion, but the rest of the module
     # was originally written to comply with ROS tf2 operations, which assume
@@ -822,7 +823,7 @@ class StandardCamera(Camera):
         cam_quat = calib['camera_quaternion']
         cam_pos = calib['camera_position']
 
-        return cls(width, height, K, dist, cam_pos, cam_quat, 
+        return cls(width, height, K, dist, cam_pos, cam_quat,
                    platform_pose_provider)
 
     def save_to_file(self, filename):
