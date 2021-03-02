@@ -30,23 +30,24 @@
 '''
 Eugene.Borovikov@Kitware.com: render colmap camera view given a 3D model in PLY format.
 '''
-import argparse, logging, cv2, numpy as np
+import os, argparse, logging, cv2 as cv, numpy as np
 import matplotlib.pyplot as plt
 from colmap_processing.geo_conversions import llh_to_enu
 from colmap_processing.static_camera_model import load_static_camera_from_file
 import colmap_processing.vtk_util as vtk_util
 
 def run(args):
-    save_dir = args.output_path
     mesh_lat0, mesh_lon0, mesh_h0 = args.LLH0
     # VTK renderings are limited to monitor resolution (width x height).
     monitor_resolution = (1920, 1080) # TODO: param/config
     model_reader = vtk_util.load_world_model(args.input_mesh)
-    height, width, K, dist, R, depth_map, latitude, longitude, altitude = load_static_camera_from_file(args.input_cam)
+### laod camera(s)
+    CamMdlFN = args.input_cam
+    height, width, K, dist, R, depth_map, latitude, longitude, altitude = load_static_camera_from_file(CamMdlFN)
     cam_pos = llh_to_enu(latitude, longitude, altitude, mesh_lat0, mesh_lon0, mesh_h0)
 ### render camera view
     render_resolution = list(monitor_resolution)
-    vfov = np.arctan(render_resolution[1]/2/K[1,1])*360/np.pi
+    vfov = np.arctan(render_resolution[1]/K[1,1])*180/np.pi
     vtk_camera = vtk_util.Camera(render_resolution[0], render_resolution[1], vfov, cam_pos, R)
     img = vtk_camera.render_image(model_reader, clipping_range=[1, 2000],
                                 diffuse=0.6, ambient=0.6, specular=0.1,
@@ -59,21 +60,23 @@ def run(args):
 #                                       clipping_range=[1, 2000])[0]
     plt.imshow(img)
     plt.show()
-    cv2.imwrite('{}/cam.view.png'.format(save_dir), img[:,:,::-1])
+    CamViewFN = os.path.join(os.path.dirname(CamMdlFN), 'vtk_view.png')
+    cv.imwrite(CamViewFN, img[:,:,::-1])
 
 def CLI(argv=None):
+    CamName = 'axisptz9'
+    CamDir = 'axisptz6_7_9'
+    CamModelFN = '../data/NorthStarReach/202102/calibration/{}/camera_models/{}/camera_model.yaml'.format(CamDir, CamName) 
     LLH0NSR = np.array([42.43722062, -84.02781521, 251.412]) # North Star Reach origin in LLH
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('-i:c', '--input_cam', metavar='path', default='../data/NorthStarReach/202010/camera_models/axisptz2/ref_view.cam.yml',
+    parser.add_argument('-i:c', '--input_cam', metavar='path', default=CamModelFN,
                         help='path/to/input/camera/model.yml; default=%(default)s')
-    parser.add_argument('-i:m', '--input_mesh', metavar='path', default='../data/NorthStarReach/202010/SLAM/georeg/poisson.ply',
+    parser.add_argument('-i:m', '--input_mesh', metavar='path', default='../data/NorthStarReach/202010/archive/202011/mesh.geo.ply',
                         help='path/to/input/mesh.ply; default=%(default)s')
     parser.add_argument('-l', '--log', metavar='level', choices=['CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG', 'NOTSET'],
                         default='WARNING', help='logging verbosity level: %(choices)s; default=%(default)s')
     parser.add_argument('-o', '--LLH0', metavar='value', default=LLH0NSR,
                         help='assumed local GPS origin as an explicit vector [latitude,longitude,altitude]; default=%(default)s')
-    parser.add_argument('-o:p', '--output_path', metavar='path', default='../data/NorthStarReach/202010/camera_models/axisptz2',
-                        help='path/to/output/model/folder; default=%(default)s')
     args = parser.parse_args(argv)
     logging.basicConfig(level=args.log)
     run(args)
