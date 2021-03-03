@@ -27,11 +27,10 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-from pyatspi import action
 '''
 Eugene.Borovikov@Kitware.com: load and print camera parameters from YAML, and optionally render the view given a 3D model in PLY format.
 '''
-import logging, numpy as np
+import logging, sys, numpy as np
 import matplotlib.pyplot as plt
 
 def run(args):
@@ -41,14 +40,19 @@ def run(args):
     height, width, K, dist, R, depth_map, latitude, longitude, altitude = load_static_camera_from_file(CamMdlFN)
 ### print camera parameters
     print(CamMdlFN)
-    print('H={}, W={}'.format(height, width))
-    print('K:\n{}'.format(K))
-    print('R:\n{}'.format(R))
-    print('lat={}, lng={}, alt={}'.format(latitude, longitude, altitude))
+    print('W,H={}'.format([width, height]))
+    np.savetxt(sys.stdout, K, '%g', '\t', header='K')
+    vFoV = np.arctan2(K[1,2], K[1,1])*180/np.pi
+    print('vFoV={}'.format(vFoV))
+    np.savetxt(sys.stdout, R, '%g', '\t', header='R')
+    print('LLH={}'.format([latitude, longitude, altitude]))
     mesh_lat0, mesh_lon0, mesh_h0 = args.LLH0
     from colmap_processing.geo_conversions import llh_to_enu
     cam_pos = llh_to_enu(latitude, longitude, altitude, mesh_lat0, mesh_lon0, mesh_h0)
     print('cam_pos={}'.format(cam_pos))
+    CCCP = np.eye(4)
+    CCCP[:3,:4] = np.array([R[0],-R[1],-R[2], cam_pos]).T
+    np.savetxt(sys.stdout, CCCP, '%g', '\t', header='CCCP')
     if not args.visual: return 0
 ### VTK rendering: limited to monitor resolution (width x height)
     monitor_resolution = (1920, 1080) # TODO: param/config
