@@ -27,24 +27,33 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+from pyatspi import action
 '''
-Eugene.Borovikov@Kitware.com: render colmap camera view given a 3D model in PLY format.
+Eugene.Borovikov@Kitware.com: load and print camera parameters from YAML, and optionally render the view given a 3D model in PLY format.
 '''
-import os, argparse, logging, cv2 as cv, numpy as np
+import logging, numpy as np
 import matplotlib.pyplot as plt
-from colmap_processing.geo_conversions import llh_to_enu
-from colmap_processing.static_camera_model import load_static_camera_from_file
-import colmap_processing.vtk_util as vtk_util
 
 def run(args):
-    mesh_lat0, mesh_lon0, mesh_h0 = args.LLH0
-    # VTK renderings are limited to monitor resolution (width x height).
-    monitor_resolution = (1920, 1080) # TODO: param/config
-    model_reader = vtk_util.load_world_model(args.input_mesh)
-### laod camera(s)
+### load camera
     CamMdlFN = args.input_cam
+    from colmap_processing.static_camera_model import load_static_camera_from_file
     height, width, K, dist, R, depth_map, latitude, longitude, altitude = load_static_camera_from_file(CamMdlFN)
+### print camera parameters
+    print(CamMdlFN)
+    print('H={}, W={}'.format(height, width))
+    print('K:\n{}'.format(K))
+    print('R:\n{}'.format(R))
+    print('lat={}, lng={}, alt={}'.format(latitude, longitude, altitude))
+    mesh_lat0, mesh_lon0, mesh_h0 = args.LLH0
+    from colmap_processing.geo_conversions import llh_to_enu
     cam_pos = llh_to_enu(latitude, longitude, altitude, mesh_lat0, mesh_lon0, mesh_h0)
+    print('cam_pos={}'.format(cam_pos))
+    if not args.visual: return 0
+### VTK rendering: limited to monitor resolution (width x height)
+    monitor_resolution = (1920, 1080) # TODO: param/config
+    import colmap_processing.vtk_util as vtk_util
+    model_reader = vtk_util.load_world_model(args.input_mesh)
 ### render camera view
     render_resolution = list(monitor_resolution)
     vfov = np.arctan(render_resolution[1]/K[1,1])*180/np.pi
@@ -60,10 +69,14 @@ def run(args):
 #                                       clipping_range=[1, 2000])[0]
     plt.imshow(img)
     plt.show()
+### save camera view to an image file
+    import os
     CamViewFN = os.path.join(os.path.dirname(CamMdlFN), 'vtk_view.png')
+    import cv2 as cv
     cv.imwrite(CamViewFN, img[:,:,::-1])
 
 def CLI(argv=None):
+    import argparse
     CamName = 'axisptz9'
     CamDir = 'axisptz6_7_9'
     CamModelFN = '../data/NorthStarReach/202102/calibration/{}/camera_models/{}/camera_model.yaml'.format(CamDir, CamName) 
@@ -77,6 +90,7 @@ def CLI(argv=None):
                         default='WARNING', help='logging verbosity level: %(choices)s; default=%(default)s')
     parser.add_argument('-o', '--LLH0', metavar='value', default=LLH0NSR,
                         help='assumed local GPS origin as an explicit vector [latitude,longitude,altitude]; default=%(default)s')
+    parser.add_argument('-v', '--visual', action='store_true', help='display/save visuals')
     args = parser.parse_args(argv)
     logging.basicConfig(level=args.log)
     run(args)
