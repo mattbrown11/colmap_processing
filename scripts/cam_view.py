@@ -52,7 +52,7 @@ def run(args):
     print('cam_pos={}'.format(cam_pos))
     CCCP = np.eye(4)
     CCCP[:3,:4] = np.array([R[0],-R[1],-R[2], cam_pos]).T
-    np.savetxt(sys.stdout, CCCP, '%g', '\t', header='CCCP')
+    np.savetxt(sys.stdout, CCCP, '%g', '\t', header='CloudCompare camera pose')
     if not args.visual: return 0
 ### VTK rendering: limited to monitor resolution (width x height)
     monitor_resolution = (1920, 1080) # TODO: param/config
@@ -81,8 +81,8 @@ def run(args):
 
 def CLI(argv=None):
     import argparse
-    CamName = 'axisptz9'
-    CamDir = 'axisptz6_7_9'
+    CamName = 'axisptz2'
+    CamDir = 'axisptz2_3_retake'
     CamModelFN = '../data/NorthStarReach/202102/calibration/{}/camera_models/{}/camera_model.yaml'.format(CamDir, CamName) 
     LLH0NSR = np.array([42.43722062, -84.02781521, 251.412]) # North Star Reach origin in LLH
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
