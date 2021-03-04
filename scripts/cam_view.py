@@ -42,7 +42,7 @@ def run(args):
     print(CamMdlFN)
     print('W,H={}'.format([width, height]))
     np.savetxt(sys.stdout, K, '%g', '\t', header='K')
-    vFoV = np.arctan2(K[1,2], K[1,1])*180/np.pi
+    vFoV = np.arctan2(height/2, K[1,1])*360/np.pi
     print('vFoV={}'.format(vFoV))
     np.savetxt(sys.stdout, R, '%g', '\t', header='R')
     print('LLH={}'.format([latitude, longitude, altitude]))
@@ -60,35 +60,30 @@ def run(args):
     model_reader = vtk_util.load_world_model(args.input_mesh)
 ### render camera view
     render_resolution = list(monitor_resolution)
-    vfov = np.arctan(render_resolution[1]/K[1,1])*180/np.pi
-    vtk_camera = vtk_util.Camera(render_resolution[0], render_resolution[1], vfov, cam_pos, R)
-    img = vtk_camera.render_image(model_reader, clipping_range=[1, 2000],
-                                diffuse=0.6, ambient=0.6, specular=0.1,
-                                light_color=[1.0, 1.0, 1.0],
-                                light_pos=[0, 0, 1000])
-# from colmap_processing.vtk_util import render_distored_image
-#     img = render_distored_image(width, height, K, dist, cam_pos, R,
-#                                       model_reader, return_depth=True,
-#                                       monitor_resolution=monitor_resolution,
-#                                       clipping_range=[1, 2000])[0]
+    vtk_camera = vtk_util.Camera(render_resolution[0], render_resolution[1], vFoV, cam_pos, R)
+    img = vtk_camera.render_image(model_reader)
     plt.imshow(img)
     plt.show()
 ### save camera view to an image file
     import os
-    CamViewFN = os.path.join(os.path.dirname(CamMdlFN), 'vtk_view.png')
+    CamViewFN = os.path.splitext(CamMdlFN)[0]+'.vtk.jpg'
     import cv2 as cv
     cv.imwrite(CamViewFN, img[:,:,::-1])
 
 def CLI(argv=None):
     import argparse
-    CamName = 'axisptz2'
-    CamDir = 'axisptz2_3_retake'
-    CamModelFN = '../data/NorthStarReach/202102/calibration/{}/camera_models/{}/camera_model.yaml'.format(CamDir, CamName) 
-    LLH0NSR = np.array([42.43722062, -84.02781521, 251.412]) # North Star Reach origin in LLH
+    # CamName = 'axisptz2'
+    # CamDir = 'axisptz2_3_retake'
+    # CamModelFN = '../data/NorthStarReach/202102/calibration/{}/camera_models/{}/camera_model.yaml'.format(CamDir, CamName)
+    # MeshFN = '../data/NorthStarReach/202010/archive/202011/mesh.geo.ply'
+    MeshFN = '../data/KHQ/Construction/20190714/202009/geo/khq_mesh.ply'
+    CamModelFN = '../data/KHQ/Construction/20190714/202103/frames/000128.cam.yml'
+    # LLH0NSR = np.array([42.43722062, -84.02781521, 251.412]) # North Star Reach origin in LLH
+    LLH0NSR = np.array([42.86453893, -73.77125128, 73]) # KHQ
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('-i:c', '--input_cam', metavar='path', default=CamModelFN,
                         help='path/to/input/camera/model.yml; default=%(default)s')
-    parser.add_argument('-i:m', '--input_mesh', metavar='path', default='../data/NorthStarReach/202010/archive/202011/mesh.geo.ply',
+    parser.add_argument('-i:m', '--input_mesh', metavar='path', default=MeshFN,
                         help='path/to/input/mesh.ply; default=%(default)s')
     parser.add_argument('-l', '--log', metavar='level', choices=['CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG', 'NOTSET'],
                         default='WARNING', help='logging verbosity level: %(choices)s; default=%(default)s')
