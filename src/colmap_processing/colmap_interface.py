@@ -301,7 +301,7 @@ def write_cameras_text(cameras, path):
     with open(path, "w") as fid:
         fid.write(HEADER)
         for _, cam in cameras.items():
-            to_write = [cam.id, cam.model, cam.width, cam.height, *cam.params]
+            to_write = [cam.id, cam.model, cam.width, cam.height] + [p for p in cam.params]
             line = " ".join([str(elem) for elem in to_write])
             fid.write(line + "\n")
  
@@ -344,13 +344,13 @@ def write_images_text(images, path):
     with open(path, "w") as fid:
         fid.write(HEADER)
         for _, img in images.items():
-            image_header = [img.id, *img.qvec, *img.tvec, img.camera_id, img.name]
+            image_header = [img.id] + [q for q in img.qvec] + [t for t in img.tvec] + [img.camera_id, img.name]
             first_line = " ".join(map(str, image_header))
             fid.write(first_line + "\n")
  
             points_strings = []
             for xy, point3D_id in zip(img.xys, img.point3D_ids):
-                points_strings.append(" ".join(map(str, [*xy, point3D_id])))
+                points_strings.append(" ".join(map(str, [v for v in xy] + [point3D_id])))
             fid.write(" ".join(points_strings) + "\n")
  
  
@@ -372,7 +372,7 @@ def write_images_binary(images, path_to_model_file):
             write_next_bytes(fid, b"\x00", "c")
             write_next_bytes(fid, len(img.point3D_ids), "Q")
             for xy, p3d_id in zip(img.xys, img.point3D_ids):
-                write_next_bytes(fid, [*xy, p3d_id], "ddq")
+                write_next_bytes(fid, [v for v in xy] + [p3d_id], "ddq")
 
 
 def write_points3D_text(points3D, path):
@@ -392,7 +392,7 @@ def write_points3D_text(points3D, path):
     with open(path, "w") as fid:
         fid.write(HEADER)
         for _, pt in points3D.items():
-            point_header = [pt.id, *pt.xyz, *pt.rgb, pt.error]
+            point_header = [pt.id] + [v for v in pt.xyz] + [v for v in pt.rgb] + [pt.error]
             fid.write(" ".join(map(str, point_header)) + " ")
             track_strings = []
             for image_id, point2D in zip(pt.image_ids, pt.point2D_idxs):
