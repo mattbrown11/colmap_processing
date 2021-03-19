@@ -192,7 +192,7 @@ def draw_camera(K, R, t, w, h,
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('input_model', required=True, help='path to input model folder')
+    parser.add_argument('input_model', help='path/to/input/model/folder')
     parser.add_argument('--input_format', choices=['.bin', '.txt'], default='.bin', help='input model format: %(choices)s; default=%(default)s')
     parser.add_argument('-l', '--log', metavar='level', choices=['CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG', 'NOTSET'],
                         default='WARNING', help='logging verbosity level: %(choices)s; default=%(default)s')
