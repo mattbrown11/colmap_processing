@@ -29,45 +29,40 @@
 # POSSIBILITY OF SUCH DAMAGE.
 '''
 Eugene.Borovikov@kitware.com: model visualization adapted from a COLMAP provided example.
+Use typical 3D mouse manipulation gestures. ESC to exit.
 '''
 
-import argparse
+import argparse, logging, open3d
 import numpy as np
-import open3d
 
 from colmap_processing.colmap_interface import read_model, qvec2rotmat
 
 
-class Model:
-    def __init__(self):
+class Model: # COLMAP model visualization facility
+    def __init__(self, path=None, ext=None):
         self.cameras = []
         self.images = []
         self.points3D = []
         self.__vis = None
+        if path: self.read_model(path, ext)
 
-    def read_model(self, path, ext=''):
+    def read_model(self, path, ext=None):
         self.cameras, self.images, self.points3D = read_model(path, ext)
 
     def add_points(self, min_track_len=3, remove_statistical_outlier=True):
         pcd = open3d.geometry.PointCloud()
-
         xyz = []
         rgb = []
         for point3D in self.points3D.values():
             track_len = len(point3D.point2D_idxs)
-            if track_len < min_track_len:
-                continue
+            if track_len < min_track_len: continue
             xyz.append(point3D.xyz)
             rgb.append(point3D.rgb / 255)
-
         pcd.points = open3d.utility.Vector3dVector(xyz)
         pcd.colors = open3d.utility.Vector3dVector(rgb)
-
         # remove obvious outliers
         if remove_statistical_outlier:
-            [pcd, _] = pcd.remove_statistical_outlier(nb_neighbors=20,
-                                                      std_ratio=2.0)
-
+            [pcd, _] = pcd.remove_statistical_outlier(nb_neighbors=20, std_ratio=2.0)
         # open3d.visualization.draw_geometries([pcd])
         self.__vis.add_geometry(pcd)
         self.__vis.poll_events()
@@ -78,17 +73,13 @@ class Model:
         for img in self.images.values():
             # rotation
             R = qvec2rotmat(img.qvec)
-
             # translation
             t = img.tvec
-
-            # invert
-            t = -R.T @ t
+            # pose
+            t = -R.T.dot(t)
             R = R.T
-
             # intrinsics
             cam = self.cameras[img.camera_id]
-
             if cam.model in ('SIMPLE_PINHOLE', 'SIMPLE_RADIAL', 'RADIAL'):
                 fx = fy = cam.params[0]
                 cx = cam.params[1]
@@ -99,19 +90,15 @@ class Model:
                 cx = cam.params[2]
                 cy = cam.params[3]
             else:
-                raise Exception('Camera model not supported')
-
-            # intrinsics
+                raise Exception('unsupported camera model: {}'.format(cam.model))
             K = np.identity(3)
-            K[0, 0] = fx
-            K[1, 1] = fy
-            K[0, 2] = cx
-            K[1, 2] = cy
-
-            # create axis, plane and pyramed geometries that will be drawn
+            K[0,0] = fx
+            K[1,1] = fy
+            K[0,2] = cx
+            K[1,2] = cy
+            # create axis, plane and pyramid geometries that will be drawn
             cam_model = draw_camera(K, R, t, cam.width, cam.height, scale)
             frames.extend(cam_model)
-
         # add geometries to visualizer
         for i in frames:
             self.__vis.add_geometry(i)
@@ -197,21 +184,17 @@ def parse_args(argv=None):
     parser.add_argument('-l', '--log', metavar='level', choices=['CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG', 'NOTSET'],
                         default='WARNING', help='logging verbosity level: %(choices)s; default=%(default)s')
     args = parser.parse_args(argv)
+    logging.basicConfig(level=args.log)
     return args
 
 
 def CLI(argv=None):
     args = parse_args(argv)
-
-    # read COLMAP model
-    model = Model()
-    model.read_model(args.input_model, ext=args.input_format)
-
-    print('num_cameras:', len(model.cameras))
-    print('num_images:', len(model.images))
-    print('num_points3D:', len(model.points3D))
-
-    # display using Open3D visualization tools
+    model = Model(args.input_model, ext=args.input_format)
+    logging.info('cameras: {}'.format(len(model.cameras)))
+    logging.info('images: {}'.format(len(model.images)))
+    logging.info('points3D: {}'.format(len(model.points3D)))
+### display using Open3D visualization tools
     model.create_window()
     model.add_points()
     model.add_cameras(scale=0.25)
