@@ -44,7 +44,12 @@ class Model: # COLMAP model visualization facility
         self.images = []
         self.points3D = []
         self.__vis = None
-        if path: self.read_model(path, ext)
+        if not path: return 
+        self.read_model(path, ext)
+        self.create_window()
+        self.add_points()
+        self.add_cameras(scale=0.25)
+
 
     def read_model(self, path, ext=None):
         self.cameras, self.images, self.points3D = read_model(path, ext)
@@ -106,6 +111,9 @@ class Model: # COLMAP model visualization facility
     def create_window(self):
         self.__vis = open3d.visualization.Visualizer()
         self.__vis.create_window()
+        opt = self.__vis.get_render_option()
+        opt.background_color = np.asarray([.9, .9, .9])
+        opt.point_size = 1.0
 
     def show(self):
         self.__vis.poll_events()
@@ -114,8 +122,7 @@ class Model: # COLMAP model visualization facility
         self.__vis.destroy_window()
 
 
-def draw_camera(K, R, t, w, h,
-                scale=1, color=[0.8, 0.2, 0.8]):
+def draw_camera(K, R, t, w, h, scale=1, color=[0.8, 0.2, 0.8]):
     '''Create axis, plane and pyramed geometries in Open3D format.
     :param K: calibration matrix (camera intrinsics)
     :param R: rotation matrix
@@ -126,19 +133,15 @@ def draw_camera(K, R, t, w, h,
     :param color: color of the image plane and pyramid lines
     :return: camera model geometries (axis, plane and pyramid)
     '''
-
     # intrinsics
     K = K.copy() / scale
     Kinv = np.linalg.inv(K)
-
     # 4x4 transformation
     T = np.column_stack((R, t))
     T = np.vstack((T, (0, 0, 0, 1)))
-
     # axis
     axis = open3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5 * scale)
     axis.transform(T)
-
     # points in pixel
     points_pixel = [
         [0, 0, 0],
@@ -147,10 +150,8 @@ def draw_camera(K, R, t, w, h,
         [0, h, 1],
         [w, h, 1],
     ]
-
     # pixel to camera coordinate system
     points = [Kinv @ p for p in points_pixel]
-
     # image plane
     width = abs(points[1][0]) + abs(points[3][0])
     height = abs(points[1][1]) + abs(points[3][1])
@@ -158,21 +159,19 @@ def draw_camera(K, R, t, w, h,
     plane.paint_uniform_color(color)
     plane.translate([points[1][0], points[1][1], scale])
     plane.transform(T)
-
     # pyramid
-    points_in_world = [(R @ p + t) for p in points]
+    points_in_world = [(R.dot(p) + t) for p in points]
     lines = [
         [0, 1],
         [0, 2],
         [0, 3],
         [0, 4],
     ]
-    colors = [color for i in range(len(lines))]
+    colors = [color for _ in range(len(lines))]
     line_set = open3d.geometry.LineSet(
         points=open3d.utility.Vector3dVector(points_in_world),
         lines=open3d.utility.Vector2iVector(lines))
     line_set.colors = open3d.utility.Vector3dVector(colors)
-
     # return as list in Open3D format
     return [axis, plane, line_set]
 
@@ -195,9 +194,6 @@ def CLI(argv=None):
     logging.info('images: {}'.format(len(model.images)))
     logging.info('points3D: {}'.format(len(model.points3D)))
 ### display using Open3D visualization tools
-    model.create_window()
-    model.add_points()
-    model.add_cameras(scale=0.25)
     model.show()
 
 
