@@ -37,9 +37,11 @@ import numpy as np
 
 from colmap_processing.colmap_interface import read_model, qvec2rotmat
 
-
 class Model: # COLMAP model visualization facility
-    def __init__(self, path=None, ext=None):
+    def __init__(self, path=None, ext=None,
+        min_track_len=3, # min len(point3D.point2D_idxs)
+        remove_outliers=[20,2.0] # [nb_neighbors, std_ratio]
+    ):
         self.cameras = []
         self.images = []
         self.points3D = []
@@ -47,14 +49,13 @@ class Model: # COLMAP model visualization facility
         if not path: return 
         self.read_model(path, ext)
         self.create_window()
-        self.add_points()
+        self.add_points(min_track_len, remove_outliers)
         self.add_cameras(scale=0.25)
-
-
     def read_model(self, path, ext=None):
         self.cameras, self.images, self.points3D = read_model(path, ext)
-
-    def add_points(self, min_track_len=3, remove_statistical_outlier=True):
+    def add_points(self, min_track_len=3,
+        remove_outliers=[20,2.0] # [nb_neighbors, std_ratio]
+    ):
         pcd = open3d.geometry.PointCloud()
         xyz = []
         rgb = []
@@ -62,17 +63,16 @@ class Model: # COLMAP model visualization facility
             track_len = len(point3D.point2D_idxs)
             if track_len < min_track_len: continue
             xyz.append(point3D.xyz)
-            rgb.append(point3D.rgb / 255)
+            rgb.append(point3D.rgb/255)
         pcd.points = open3d.utility.Vector3dVector(xyz)
         pcd.colors = open3d.utility.Vector3dVector(rgb)
         # remove obvious outliers
-        if remove_statistical_outlier:
-            [pcd, _] = pcd.remove_statistical_outlier(nb_neighbors=20, std_ratio=2.0)
+        if remove_outliers:
+            [pcd, _] = pcd.remove_statistical_outlier(*remove_outliers)
         # open3d.visualization.draw_geometries([pcd])
         self.__vis.add_geometry(pcd)
         self.__vis.poll_events()
         self.__vis.update_renderer()
-
     def add_cameras(self, scale=1):
         frames = []
         for img in self.images.values():
@@ -107,22 +107,19 @@ class Model: # COLMAP model visualization facility
         # add geometries to visualizer
         for i in frames:
             self.__vis.add_geometry(i)
-
-    def create_window(self):
+    def create_window(self, bkgClr=[.9,.9,.9], ptSize=1.0):
         self.__vis = open3d.visualization.Visualizer()
         self.__vis.create_window()
         opt = self.__vis.get_render_option()
-        opt.background_color = np.asarray([.9, .9, .9])
-        opt.point_size = 1.0
-
+        opt.background_color = np.asarray(bkgClr)
+        opt.point_size = ptSize
     def show(self):
         self.__vis.poll_events()
         self.__vis.update_renderer()
         self.__vis.run()
         self.__vis.destroy_window()
 
-
-def draw_camera(K, R, t, w, h, scale=1, color=[0.8, 0.2, 0.8]):
+def draw_camera(K, R, t, w, h, scale=2, color=[0.8, 0.2, 0.8]):
     '''Create axis, plane and pyramed geometries in Open3D format.
     :param K: calibration matrix (camera intrinsics)
     :param R: rotation matrix
@@ -175,7 +172,6 @@ def draw_camera(K, R, t, w, h, scale=1, color=[0.8, 0.2, 0.8]):
     # return as list in Open3D format
     return [axis, plane, line_set]
 
-
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('input_model', help='path/to/input/model/folder')
@@ -186,7 +182,6 @@ def parse_args(argv=None):
     logging.basicConfig(level=args.log)
     return args
 
-
 def CLI(argv=None):
     args = parse_args(argv)
     model = Model(args.input_model, ext=args.input_format)
@@ -195,6 +190,5 @@ def CLI(argv=None):
     logging.info('points3D: {}'.format(len(model.points3D)))
 ### display using Open3D visualization tools
     model.show()
-
 
 if __name__ == '__main__': CLI()
