@@ -304,8 +304,8 @@ def write_cameras_text(cameras, path):
             to_write = [cam.id, cam.model, cam.width, cam.height] + [p for p in cam.params]
             line = " ".join([str(elem) for elem in to_write])
             fid.write(line + "\n")
- 
- 
+
+
 def write_cameras_binary(cameras, path_to_model_file):
     """
     see: src/base/reconstruction.cc
@@ -340,20 +340,20 @@ def write_images_text(images, path):
     "#   IMAGE_ID, QW, QX, QY, QZ, TX, TY, TZ, CAMERA_ID, NAME\n"
     "#   POINTS2D[] as (X, Y, POINT3D_ID)\n"
     "# Number of images: {}, mean observations per image: {}\n".format(len(images), mean_observations)
- 
+
     with open(path, "w") as fid:
         fid.write(HEADER)
         for _, img in images.items():
             image_header = [img.id] + [q for q in img.qvec] + [t for t in img.tvec] + [img.camera_id, img.name]
             first_line = " ".join(map(str, image_header))
             fid.write(first_line + "\n")
- 
+
             points_strings = []
             for xy, point3D_id in zip(img.xys, img.point3D_ids):
                 points_strings.append(" ".join(map(str, [v for v in xy] + [point3D_id])))
             fid.write(" ".join(points_strings) + "\n")
- 
- 
+
+
 def write_images_binary(images, path_to_model_file):
     """
     see: src/base/reconstruction.cc
@@ -388,7 +388,7 @@ def write_points3D_text(points3D, path):
     HEADER = "# 3D point list with one line of data per point:\n"
     "#   POINT3D_ID, X, Y, Z, R, G, B, ERROR, TRACK[] as (IMAGE_ID, POINT2D_IDX)\n"
     "# Number of points: {}, mean track length: {}\n".format(len(points3D), mean_track_length)
- 
+
     with open(path, "w") as fid:
         fid.write(HEADER)
         for _, pt in points3D.items():
@@ -417,7 +417,7 @@ def write_points3d_binary(points3D, path_to_model_file):
             write_next_bytes(fid, track_length, "Q")
             for image_id, point2D_id in zip(pt.image_ids, pt.point2D_idxs):
                 write_next_bytes(fid, [image_id, point2D_id], "ii")
- 
+
 
 def write_model(cameras, images, points3D, path, ext=".bin"):
     if ext == ".txt":
@@ -460,28 +460,28 @@ def rotmat2qvec(R):
 
 def standard_cameras_from_colmap(cameras, images=None):
     """Parse Colmap 'cameras' and 'images' into instances of StandardCamera.
-    
+
     :param cameras: Output from read_cameras_text or read_cameras_binary.
     :type cameras: dict
-    
+
     :param images: Output from read_images_text or read_images_binary.
     :type images: dict | None
-    
-    :return: Dictionary indexable by camera_id returning StandardCamera. If 
-        arguement 'images' is not None, an instance of PlatformPoseProvider is 
+
+    :return: Dictionary indexable by camera_id returning StandardCamera. If
+        arguement 'images' is not None, an instance of PlatformPoseProvider is
         returned where its time input arguement should be the image index.
     :rtype: (dict, PlatformPoseProvider | None)
-        
+
     """
     if images is not None:
         # Pretend image index is the time.
         platform_pose_provider = PlatformPoseInterp()
         for image_id in images:
             image = images[image_id]
-        
+
             R = qvec2rotmat(image.qvec)
             pos = -np.dot(R.T, image.tvec)
-        
+
             # The qvec used by Colmap is a (w, x, y, z) quaternion
             # representing the rotation of a vector defined in the world
             # coordinate system into the camera coordinate system. However,
@@ -490,33 +490,33 @@ def standard_cameras_from_colmap(cameras, images=None):
             # used by 'camera_models' represents a coordinate system rotation
             # versus the coordinate system transform of Colmap's convention,
             # so we need an inverse.
-            
+
             #quat = transformations.quaternion_inverse(image.qvec)
             quat = image.qvec / np.linalg.norm(image.qvec)
             quat[0] = -quat[0]
-            
+
             quat = [quat[1], quat[2], quat[3], quat[0]]
-        
+
             t = image_id
-            platform_pose_provider.add_to_pose_time_series(t, pos, quat)    
+            platform_pose_provider.add_to_pose_time_series(t, pos, quat)
     else:
         platform_pose_provider = None
-    
+
     std_cams = {}
     for camera_id in set([images[image_id].camera_id for image_id in images]):
         colmap_camera = cameras[camera_id]
-    
+
         if colmap_camera.model == 'OPENCV':
             fx, fy, cx, cy, d1, d2, d3, d4 = colmap_camera.params
         elif colmap_camera.model == 'PINHOLE':
             fx, fy, cx, cy = colmap_camera.params
             d1 = d2 = d3 = d4 = 0
-    
+
         K = K = np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
         dist = np.array([d1, d2, d3, d4])
         std_cams[camera_id] = StandardCamera(colmap_camera.width,
                                                    colmap_camera.height, K, dist,
                                                    [0, 0, 0], [0, 0, 0, 1],
                                                    platform_pose_provider)
-    
+
     return std_cams
