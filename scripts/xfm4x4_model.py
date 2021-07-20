@@ -31,7 +31,7 @@
 '''
 Eugene_Borovikov@Kitware.com: read COLMAP model, apply a 4x4 similarity transform and save the transformed model, e.g. geo-registration.
 '''
-import argparse, logging, numpy as np
+import argparse, logging, os, numpy as np
 from colmap_processing.colmap_interface import read_model, write_model, rotmat2qvec, Image, Point3D
 
 
@@ -74,6 +74,7 @@ def run(args):
     images = {ID: xfm_img(img, s, R, t) for ID, img in images.items()}
     points3D = {ID: xfm_pt(pt, s, R, t) for ID, pt in points3D.items()}
 ### output
+    if not os.path.isdir(args.output_path): os.makedirs(args.output_path)
     write_model(cameras, images, points3D, path=args.output_path, ext=args.output_ext)
     logging.info('written model{} to {}'.format(args.output_ext, args.output_path))
 
