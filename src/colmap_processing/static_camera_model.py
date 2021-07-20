@@ -35,6 +35,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 from __future__ import division, print_function
 import numpy as np
 import os, cv2, yaml, PIL
+from PIL import Image
 
 
 def to_str(v):
