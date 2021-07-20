@@ -28,7 +28,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 '''
-Eugene.Borovikov@Kitware.com: load and print camera parameters from YAML, and optionally render the view given a 3D model in PLY format.
+Load and print camera parameters from YAML, and optionally render the view given a 3D model in PLY format.
 '''
 import logging, sys, numpy as np
 import matplotlib.pyplot as plt
