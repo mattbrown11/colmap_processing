@@ -448,12 +448,18 @@ class CameraPanTilt(Camera):
 
 
 def render_distored_image(width, height, K, dist, cam_pos, R, model_reader,
-                          return_depth=True, monitor_resolution=(1920, 1080),
+                          return_depth=True, monitor_resolution=(1000, 1000),
                           clipping_range=[1, 2000], fill_holes=True):
     """Render a view from a camera with distortion.
 
     """
     render_resolution = list(monitor_resolution)
+
+    if monitor_resolution[0] != monitor_resolution[1]:
+        raise Exception('There is a bug when the monitor resolution isn\'t '
+                        'square. Your actual monitor doesn\'t need to be '
+                        'square, just pick the largest square resolution that '
+                        'fits inside your monitor.')
 
     # Generate points along the border of the distorted camera.
     num_points = 1000
@@ -554,6 +560,10 @@ def render_distored_image(width, height, K, dist, cam_pos, R, model_reader,
     # Identify holes in the model and then inpaint them.
     if fill_holes:
         hole_mask = depth > clipping_range[-1] - 0.1
+
+        # Holes that extend to the edge of the image won't be filled via
+        # inpainting.
+
 
         output = cv2.connectedComponentsWithStats(hole_mask.astype(np.uint8),
                                                   8, cv2.CV_32S)

@@ -45,7 +45,7 @@ from numba import jit
 # Colmap Processing imports.
 from colmap_processing.geo_conversions import llh_to_enu
 from colmap_processing.colmap_interface import read_images_binary, Image, \
-    read_points3d_binary, read_cameras_binary, qvec2rotmat
+    read_points3D_binary, read_cameras_binary, qvec2rotmat
 from colmap_processing.database import COLMAPDatabase, pair_id_to_image_ids, blob_to_array
 
 
@@ -95,7 +95,7 @@ for image_num in images:
                               camera_id=image.camera_id, name=image.name,
                               xys=xys, point3D_ids=point3D_ids)
 
-pts_3d = read_points3d_binary(points_3d_bin_fname)
+pts_3d = read_points3D_binary(points_3d_bin_fname)
 
 if False:
     pts = np.array([pts_3d[_].xyz for _ in pts_3d])

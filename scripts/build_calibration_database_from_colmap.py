@@ -45,25 +45,25 @@ from numba import jit
 # Colmap Processing imports.
 from colmap_processing.geo_conversions import llh_to_enu
 from colmap_processing.colmap_interface import read_images_binary, Image, \
-    read_points3d_binary, read_cameras_binary, qvec2rotmat
+    read_points3D_binary, read_cameras_binary, qvec2rotmat
 from colmap_processing.database import COLMAPDatabase, pair_id_to_image_ids, blob_to_array
 
 
 
 # ----------------------------------------------------------------------------
 # Base path to the colmap directory.
-image_dir = '/home/mattb/projects/khq_small_test'
+image_dir = 'small_test'
 
 # Path to the images.bin file.
-images_bin_fname = '/home/mattb/projects/khq_small_test/images.bin'
+images_bin_fname = 'images.bin'
 
 # Path to the points3D.bin file.
-points_3d_bin_fname = '/home/mattb/projects/khq_small_test/points3D.bin'
+points_3d_bin_fname = 'points3D.bin'
 
 # Path to save images to in order to geo-register.
-georegister_data_dir = '/home/mattb/libraries/georegistration_gui/data/khq_colmap_small'
+georegister_data_dir = 'small'
 
-model_save_location = '/host_filesystem/home/mattb/threatx_ws/src/threatx_assets/camera_models/location_models/khq/'
+model_save_location = 'models'
 
 # Define ENU coordinate system origin.
 lat0 = 42.8646162
@@ -111,7 +111,7 @@ if False:
         img = cv2.imwrite(img_fname, img)
 
 
-pts_3d = read_points3d_binary(points_3d_bin_fname)
+pts_3d = read_points3D_binary(points_3d_bin_fname)
 
 
 # Load in georegistration points.
@@ -306,7 +306,7 @@ with open(fname, 'wb') as handle:
 
 
 # Read in test image.
-img_fname = '/host_filesystem/home/mattb/threatx_ws/config/camera_models/amcrest/am1/ref_image.png'
+img_fname = 'ref_image.png'
 
 orb = cv2.ORB_create(nfeatures=int(1e4), nlevels=20, scaleFactor=1.2)
 img = cv2.imread(img_fname)
@@ -333,7 +333,7 @@ plt.imshow(img_ref)
 
 
 
-img_fname = '/host_filesystem/home/mattb/threatx_ws/config/camera_models/amcrest/am1/ref_image.png'
+img_fname = 'ref_image.png'
 orb = cv2.ORB_create(nfeatures=int(1e4), nlevels=30, scaleFactor=1.2)
 img = cv2.imread(img_fname)
 kp, des = orb.detectAndCompute(img, None)
@@ -451,7 +451,7 @@ plt.show()
 
 if False:
     # Draw manual key points.
-    save_dir = '/home/mattb/projects/calamityville/'
+    save_dir = ''
     for key in manual_matches:
         image_id1,image_id2 = key
         img1 = cv2.imread(image_fnames[image_id1 - 1])[:,:,::-1].copy()

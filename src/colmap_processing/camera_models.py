@@ -826,6 +826,43 @@ class StandardCamera(Camera):
         return cls(width, height, K, dist, cam_pos, cam_quat,
                    platform_pose_provider)
 
+    @classmethod
+    def load_from_krtd(cls, filename):
+        """See base class Camera documentation.
+
+        """
+        data = []
+        with open(filename) as f:
+            for line in f.readlines():
+                data.append(line.strip('\n'))
+
+        fx = float(data[0].split(' ' )[0])
+        fy = float(data[1].split(' ' )[1])
+        cx = float(data[0].split(' ' )[2])
+        cy = float(data[1].split(' ' )[2])
+
+        R = np.zeros((3, 3))
+
+        for i in range(3):
+            R[i] = [float(d) for d in data[4 + i].split(' ')]
+
+        tvec = [float(d) for d in data[8].split(' ')]
+
+        cam_pos = -np.dot(R.T, tvec).ravel()
+
+        cam_quat = quaternion_inverse(quaternion_from_matrix(R))
+
+        # fill in CameraInfo fields
+        width = None
+        height = None
+
+        dist = [float(d) for d in data[10].split(' ') if len(d) > 0]
+        dist = np.array(dist)
+
+        K = np.array([[fx, 0, cx], [0, fy, cy],[0, 0, 1]])
+
+        return cls(width, height, K, dist, cam_pos, cam_quat)
+
     def save_to_file(self, filename):
         """See base class Camera documentation.
 
@@ -864,7 +901,7 @@ class StandardCamera(Camera):
                              'represents a coordinate\n# system rotation that ',
                              'takes the platform coordinate system and ',
                              'rotates it\n# into the camera coordinate ',
-                             'system.\n camera_quaternion: ',
+                             'system.\ncamera_quaternion: ',
                              to_str(self.cam_quat),'\n\n']))
 
             f.write(''.join(['# Position of the camera\'s center of ',

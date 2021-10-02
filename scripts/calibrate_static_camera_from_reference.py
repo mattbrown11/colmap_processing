@@ -49,7 +49,7 @@ from scipy.optimize import fmin, minimize, fminbound
 # Colmap Processing imports.
 from colmap_processing.geo_conversions import llh_to_enu
 from colmap_processing.colmap_interface import read_images_binary, Image, \
-    read_points3d_binary, read_cameras_binary, qvec2rotmat
+    read_points3D_binary, read_cameras_binary, qvec2rotmat
 from colmap_processing.database import COLMAPDatabase, pair_id_to_image_ids, blob_to_array
 import colmap_processing.vtk_util as vtk_util
 from colmap_processing.geo_conversions import enu_to_llh, llh_to_enu, \
@@ -90,7 +90,7 @@ model_reader = vtk_util.load_world_model(mesh_fname)
 # Read in the details of all images.
 images = read_images_binary(images_bin_fname)
 cameras = read_cameras_binary(camera_bin_fname)
-pts_3d = read_points3d_binary(points_3d_bin_fname)
+pts_3d = read_points3D_binary(points_3d_bin_fname)
 
 
 def get_xyz_from_image_pt(image_id, im_pt):
@@ -181,11 +181,11 @@ def calibrate_manual_clicked_reference(image_fname, points_fname,
     ray_dir = np.ones((3, len(ref_pts)), dtype=np.float)
     ray_dir0 = cv2.undistortPoints(np.expand_dims(ref_pts, 0),
                                    K_ref, dist_ref, R=None)
-    ray_dir[:2] = np.squeeze(ray_dir0, 0).T
+    ray_dir[:2] = np.squeeze(ray_dir0, 1).T
 
     # Rotate rays into the local east/north/up coordinate system.
     ray_dir = np.dot(R.T, ray_dir)
-    ray_dir /= np.sqrt(np.sum(ray_dir**2, 0))
+    #ray_dir /= np.sqrt(np.sum(ray_dir**2, 0))
 
     for i in range(ref_pts.shape[0]):
         x, y = ref_pts[i]
@@ -553,7 +553,7 @@ def save_camera_model(width, height, K, dist, cam_pos, R, real_image,
                       save_dir, mode=1, scale=0.5):
     ret = vtk_util.render_distored_image(width, height, K, dist, cam_pos, R,
                                          model_reader, return_depth=True,
-                                         monitor_resolution=(1920, 1080))
+                                         monitor_resolution=(1080, 1080))
     img, depth, E, N, U = ret
 
     # ------------------------------------------------------------------------
@@ -566,7 +566,7 @@ def save_camera_model(width, height, K, dist, cam_pos, R, real_image,
     cv2.imwrite('%s/ref_view.png' % save_dir, real_image[:, :, ::-1])
 
     # Read and undistort image.
-    cv2.imwrite('%s/rendered_view.png' % save_dir, img[:, :, ::-1])
+    cv2.imwrite('%s/rendered_view.jpg' % save_dir, img[:, :, ::-1])
     # -------------------------------------------------------------------
 
     latitude, longitude, altitude = enu_to_llh(cam_pos[0], cam_pos[1],

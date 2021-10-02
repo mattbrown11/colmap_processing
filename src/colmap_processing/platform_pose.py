@@ -114,7 +114,7 @@ class PlatformPoseInterp(PlatformPoseProvider):
     """Interpolated pose from a time series.
 
     """
-    def __init__(self, lat0=None, lon0=None, h0=None):
+    def __init__(self, lat0=None, lon0=None, h0=None, max_length=np.inf):
         """
 
         """
@@ -122,6 +122,7 @@ class PlatformPoseInterp(PlatformPoseProvider):
         self.lat0 = lat0
         self.lon0 = lon0
         self.h0 = h0
+        self.max_length = max_length
 
     @property
     def pose_time_series(self):
@@ -132,7 +133,7 @@ class PlatformPoseInterp(PlatformPoseProvider):
         """Adds to pose time series such that time is monotonically increasiing.
 
         """
-        pose = np.hstack([t,pos,quat])
+        pose = np.hstack([t, pos, quat])
         with lock:
             k = len(self._pose_time_series)
             if k == 0:
@@ -151,7 +152,7 @@ class PlatformPoseInterp(PlatformPoseProvider):
                                                        k, pose, axis=0)
                     break
 
-            if len(self._pose_time_series) > 1e4:
+            if len(self._pose_time_series) > self.max_length:
                 self._pose_time_series = np.delete(self._pose_time_series, 0,
                                                    0)
 

@@ -61,14 +61,14 @@ from mpl_toolkits.mplot3d import Axes3D
 # Colmap Processing imports.
 from colmap_processing.geo_conversions import llh_to_enu, enu_to_llh
 from colmap_processing.colmap_interface import read_images_binary, Image, \
-    read_points3d_binary, read_cameras_binary, qvec2rotmat
+    read_points3D_binary, read_cameras_binary, qvec2rotmat
 from colmap_processing.database import COLMAPDatabase, pair_id_to_image_ids, blob_to_array
 
 
 # ----------------------------------------------------------------------------
 # Base path to the colmap directory.
-image_dir = 'images'
-colmap_data_dir = 'colmap'
+image_dir = '/media/images0'
+colmap_data_dir = '/media/colmap'
 
 # Path to the images.bin file.
 images_bin_fname = '%s/images.bin' % colmap_data_dir
@@ -137,7 +137,7 @@ if False:
         img = cv2.imwrite(img_fname, img)
 
 
-pts_3d = read_points3d_binary(points_3d_bin_fname)
+pts_3d = read_points3D_binary(points_3d_bin_fname)
 
 
 def show_image(image_id):

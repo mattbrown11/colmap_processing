@@ -64,13 +64,18 @@ from colmap_processing.camera_models import ray_intersect_plane
 
 
 def horn(P, Q):
-    """
+    """Method of Horn.
+
     :param P: Initial point cloud.
     :type P: N x num_dim
-    
+
     :param Q: Destination point cloud.
     :type Q: N x num_dim
-        
+
+    :return: Scale, rotation matrix, and translation to be applied in that
+        order.
+    :rtype:
+
     """
     if P.shape != Q.shape:
         print("Matrices P and Q must be of the same dimensionality")
@@ -80,11 +85,11 @@ def horn(P, Q):
     A = P - np.outer(P0, np.ones(P.shape[1]))
     B = Q - np.outer(Q0, np.ones(Q.shape[1]))
     s = np.sqrt(np.mean(B.ravel()**2)) / np.sqrt(np.mean(A.ravel()**2))
-    
+
     # Apply scale.
     A = s*A
     P0 = P0*s
-    
+
     C = np.dot(A, B.transpose())
     U, S, V = np.linalg.svd(C)
     R = np.dot(V.transpose(), U.transpose())
@@ -263,6 +268,20 @@ def calibrate_camera_to_xyz(im_pts, wrld_pts, height, width,
 
             im_pts2 = cv2.projectPoints(wrld_pts, rvec, tvec, K, dist)
             err_ = np.sqrt(np.sum((np.squeeze(im_pts2[0]) - im_pts)**2, axis=1))
+
+            # Check that the world points are actually in front of the camera.
+            R = cv2.Rodrigues(rvec)[0]
+            cam_pos = -np.dot(R.T, tvec).ravel()
+            ray_dir0 = (wrld_pts - cam_pos).T
+            ray_dir0 /=  np.sqrt(np.sum(ray_dir0**2, 0))
+            ray_dir0 = np.dot(R, ray_dir0)
+
+            ray_dir = np.ones((3, len(im_pts)), dtype=np.float)
+            ray_dir[:2] = np.squeeze(cv2.undistortPoints(im_pts, K, dist, R=None), 1).T
+            ray_dir /=  np.sqrt(np.sum(ray_dir**2, 0))
+
+            if np.any(np.sum(ray_dir * ray_dir0, axis=0) < 0.999):
+                continue
 
             # Ignore correspondences that are 10X the mean error.
             ind = err < 10*err_.mean()

@@ -48,7 +48,7 @@ docker run -it \
         --Mapper.ba_global_max_refinement_change=0.00050000000000000001 \
         --Mapper.ba_local_max_refinements=2 \
         --Mapper.ba_local_max_refinement_change=0.001 \
-        --Mapper.snapshot_images_freq=1 \
+        --Mapper.snapshot_images_freq=0 \
         --Mapper.fix_existing_images=0 \
         --Mapper.init_min_num_inliers=100 \
         --Mapper.init_max_error=4 \

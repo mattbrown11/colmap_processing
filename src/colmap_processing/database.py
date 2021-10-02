@@ -113,13 +113,13 @@ CREATE_ALL = "; ".join([
 def image_ids_to_pair_id(image_id1, image_id2):
     if image_id1 > image_id2:
         image_id1, image_id2 = image_id2, image_id1
-    return image_id1 * MAX_IMAGE_ID + image_id2
+    return int(image_id1 * MAX_IMAGE_ID + image_id2)
 
 
 def pair_id_to_image_ids(pair_id):
     image_id2 = pair_id % MAX_IMAGE_ID
     image_id1 = (pair_id - image_id2) / MAX_IMAGE_ID
-    return image_id1, image_id2
+    return int(image_id1), int(image_id2)
 
 
 def array_to_blob(array):
@@ -228,10 +228,14 @@ class COLMAPDatabase(sqlite3.Connection):
 
     def get_all_two_view_geometry(self, min_matches=0):
         cursor = self.cursor()
-        cursor.execute("SELECT pair_id, data FROM two_view_geometries")
+        cursor.execute("SELECT pair_id, data, config, F, E, H FROM two_view_geometries")
         inlier_matches = []
         pair_ids = []
         image_ids = []
+        config = []
+        F = []
+        H = []
+        E = []
         for row in cursor:
             pair_id = row[0]
             if row[1] is not None:
@@ -242,7 +246,12 @@ class COLMAPDatabase(sqlite3.Connection):
                     image_ids.append(pair_id_to_image_ids(pair_id))
                     inlier_matches.append(inlier_matches_)
 
-        return pair_ids, image_ids, inlier_matches
+                config.append(row[2])
+                F.append(blob_to_array(row[3], dtype=np.float64, shape=(3,3)))
+                E.append(blob_to_array(row[4], dtype=np.float64, shape=(3,3)))
+                H.append(blob_to_array(row[5], dtype=np.float64, shape=(3,3)))
+
+        return pair_ids, image_ids, inlier_matches, F, E, H, config
 
     def get_all_pair_id(self):
         cursor = self.cursor()
@@ -267,6 +276,13 @@ class COLMAPDatabase(sqlite3.Connection):
         keypoints = dict((image_id, blob_to_array(data, np.float32, (-1, 2)))
                          for image_id, data in cursor)
         return keypoints
+
+    def get_descriptors_from_image_dict(self):
+        cursor = self.cursor()
+        cursor.execute("SELECT image_id, data FROM descriptors")
+        descriptors = dict((image_id, blob_to_array(data, np.uint8, (-1, 128)))
+                           for image_id, data in cursor)
+        return descriptors
 
     def delete_pair(self, pair_id):
         """Remove a two-view geometry pair.

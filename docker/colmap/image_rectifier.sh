@@ -10,9 +10,4 @@ docker run -it \
     -w /working \
     -v $1:/working \
     colmap/colmap:latest \
-    colmap image_undistorter \
-        --image_path images0 \
-        --input_path sparse/$2 \
-        --output_path dense \
-        --output_type COLMAP \
-        --max_image_size 6000
+    colmap image_rectifier

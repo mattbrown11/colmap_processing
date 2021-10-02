@@ -50,20 +50,20 @@ from colmap_processing.geo_conversions import enu_to_llh
 
 # ----------------------------------------------------------------------------
 if True:
-    mesh_fname = 'everything.ply'
-    save_dir = 'meshed'
+    mesh_fname = 'geo.ply'
+    save_dir = 'meshed_models'
 
     # Latitude and longitude associated with (0, 0, 0) in the model.
-    latitude0 = 0    # degrees
-    longitude0 = 0  # degrees
-    altitude0 = 0  # degrees
+    latitude0 = 0      # degrees
+    longitude0 = 0     # degrees
+    height0 = 0            # meters above WGS84 ellipsoid
 
     # Set GSD of orthographic base layer.
     gsd = 0.05  # meters
 
 
 # VTK renderings are limited to monitor resolution (width x height).
-monitor_resolution = (1920, 1080)
+monitor_resolution = (1080, 1080)
 # ----------------------------------------------------------------------------
 
 
@@ -114,7 +114,7 @@ def get_ortho_image(xbnds, ybnds, res_x, res_y):
 
     ret = ortho_camera.unproject_view(model_reader,
                                       clipping_range=clipping_range)
-    z = ret[2] + altitude0
+    z = ret[2] + height0
     return img, z
 
 
@@ -147,7 +147,7 @@ print('DEM elevation ranges from %0.4f to %0.4f' %
 
 # ----------------------------------------------------------------------------
 # Identify holes in the model and then inpaint them.
-hole_mask = dem < model_bounds[2, 0] - 0.1
+hole_mask = dem < dem.ravel().min() + 0.1
 
 output = cv2.connectedComponentsWithStats(hole_mask.astype(np.uint8), 8, cv2.CV_32S)
 num_labels = output[0]

@@ -47,7 +47,7 @@ from osgeo import osr, gdal
 # Colmap Processing imports.
 from colmap_processing.geo_conversions import llh_to_enu
 from colmap_processing.colmap_interface import read_images_binary, Image, \
-    read_points3d_binary, read_cameras_binary, qvec2rotmat
+    read_points3D_binary, read_cameras_binary, qvec2rotmat
 from colmap_processing.database import COLMAPDatabase, pair_id_to_image_ids, blob_to_array
 import colmap_processing.vtk_util as vtk_util
 from colmap_processing.geo_conversions import enu_to_llh, llh_to_enu, \
@@ -73,7 +73,9 @@ else:
     raise Exception('Unrecognized location \'%s\'' % location)
 
 # VTK renderings are limited to monitor resolution (width x height).
-monitor_resolution = (1920, 1080)
+monitor_resolution = (1080, 1080)
+
+clipping_range = [1, 2000]
 # ----------------------------------------------------------------------------
 
 
@@ -112,15 +114,29 @@ else:
                rmat_ecef_enu(latitude, longitude))
     R = np.dot(R, Rp)
 
-rendered_view = render_distored_image(width, height, K, dist, cam_pos, R,
-                                      model_reader, return_depth=True,
-                                      monitor_resolution=monitor_resolution,
-                                      clipping_range=[1, 2000])[0]
+ret = vtk_util.render_distored_image(width, height, K, dist, cam_pos, R,
+                                     model_reader, return_depth=True,
+                                     monitor_resolution=(1080, 1080),
+                                     clipping_range=clipping_range)
+rendered_view, depth, E, N, U = ret
 
 
+if False:
+    im = PIL.Image.fromarray(depth, mode='F')  # float32
+    depth_map_fname = '%s/camera_model_depth_map.tif' % save_dir
+    im.save(depth_map_fname)
 
+    depth_image = depth.copy()
+    depth_image[depth_image > clipping_range[1]*0.9] = 0
+    depth_image -= depth_image.min()
+    depth_image /= depth_image.max()/255
+    depth_image = np.round(depth_image).astype(np.uint8)
+
+    depth_image = cv2.applyColorMap(depth_image, cv2.COLORMAP_JET)
+    cv2.imwrite('%s/depth_vizualization.png' % save_dir,
+                depth_image[:, :, ::-1])
 
 plt.imshow(rendered_view)
 
 
-cv2.imwrite('%s/rendered.png' % save_dir, rendered_view[:, :, ::-1])
+cv2.imwrite('%s/rendered.jpg' % save_dir, rendered_view[:, :, ::-1])

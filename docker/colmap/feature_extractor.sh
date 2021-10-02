@@ -24,7 +24,7 @@ docker run -it \
    	--SiftExtraction.max_image_size=3200 \
    	--SiftExtraction.max_num_features=8192 \
    	--SiftExtraction.first_octave=-1 \
-   	--SiftExtraction.num_octaves=4 \
+   	--SiftExtraction.num_octaves=11 \
    	--SiftExtraction.octave_resolution=3 \
    	--SiftExtraction.peak_threshold=0.0066666666666666671 \
    	--SiftExtraction.edge_threshold=10 \
