@@ -78,7 +78,7 @@ CAMERA_MODELS = {
     CameraModel(model_id=9, model_name="RADIAL_FISHEYE", num_params=5),
     CameraModel(model_id=10, model_name="THIN_PRISM_FISHEYE", num_params=12)
 }
-<<<<<<< HEAD
+
 CAMERA_MODEL_IDS = dict([(camera_model.model_id, camera_model) \
                          for camera_model in CAMERA_MODELS])
 CAMERA_MODEL_NAMES = dict([(camera_model.model_name, camera_model)
@@ -94,10 +94,6 @@ CAMERA_MODEL_NAMES_TO_IND = {"SIMPLE_PINHOLE":0,
                              "SIMPLE_RADIAL_FISHEYE":8,
                              "RADIAL_FISHEYE":9,
                              "THIN_PRISM_FISHEYE":10}
-=======
-CAMERA_MODEL_IDS = dict([(camera_model.model_id, camera_model) for camera_model in CAMERA_MODELS])
-CAMERA_MODEL_NAMES = dict([(camera_model.model_name, camera_model) for camera_model in CAMERA_MODELS])
->>>>>>> 5d78faa8c9d1bf88be0e317e89af50a809ed6188
 
 
 def read_next_bytes(fid, num_bytes, format_char_sequence, endian_character="<"):
