@@ -43,6 +43,7 @@ setup(
       packages=['colmap_processing'],
       package_dir={'':'src'},
       install_requires=[
+        'pyyaml',
         'opencv-python'
         ]
 
