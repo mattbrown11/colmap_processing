@@ -34,16 +34,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 #from distutils.core import setup
 from setuptools import setup
-setup(name='colmap_processing',
+setup(
+      name='colmap_processing',
       version='1.0',
       description='COLMAP post processing',
       author='Matt Brown',
       author_email='matt.brown@kitware.com',
-      url='https://www.python.org/sigs/distutils-sig/',
-      packages=['keypointgui'],
-      package_data={'src/colmap_processing'},
+      packages=['colmap_processing'],
+      package_dir={'':'src'},
       install_requires=[
         'opencv-python'
-    ]
+        ]
 
      )
