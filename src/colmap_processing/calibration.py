@@ -65,7 +65,7 @@ from colmap_processing.camera_models import ray_intersect_plane
 
 def horn(P, Q):
     """Method of Horn.
-
+    
     :param P: Initial point cloud.
     :type P: N x num_dim
 
@@ -75,6 +75,33 @@ def horn(P, Q):
     :return: Scale, rotation matrix, and translation to be applied in that
         order.
     :rtype:
+        
+    Example:
+    
+    s = 213.5
+    S = np.diag([s, s, s, 1])
+    R = np.identity(4)
+    R[:3, :3] = np.array([[0.411982,-0.833738,-0.367630], 
+                  [-0.058727,-0.426918,0.902382],
+                  [-0.909297,-0.350175,-0.224845]])
+    t = [1, 2, 3]
+    T = np.identity(4)
+    T[:3, 3] = t
+    
+    H = np.dot(np.dot(T, R), S)[:3]
+    
+    xyz1 = np.random.rand(4, 100)
+    xyz1[3, :] = 1
+    xyz2 = np.dot(H, xyz1)
+    
+    s2, R2, t2 = horn(xyz1[:3], xyz2)
+    print(s, s2)
+    print(R[:3, :3], R2)
+    print(t, t2)
+    
+    
+    
+    H = np.dot(np.dot(T, R), S)
 
     """
     if P.shape != Q.shape:
