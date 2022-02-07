@@ -3,15 +3,17 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 
-fnames = glob.glob('/mnt/ten_tb_data/kamera/Calibration imagery/fl08/colmap/images0/fl09_right_uv/*.jpg')
+fnames = glob.glob('//mnt/data2tb/ursa/3d/GuardianCenter/images0/exterior_loop/*.JPG')
 
 stretch_percentiles = [0.1, 99.9]
-monochrome = True
-clip_limit = 10
-median_blur_diam = 3
+monochrome = False
+clip_limit = 3.5
+median_blur_diam = 0
+
 
 for fname in fnames:
-    img = cv2.imread(fname)
+    print('Processing image \'%s\'' % fname)
+    img = cv2.imread(fname, cv2.IMREAD_UNCHANGED)
     if img.ndim == 3 and monochrome:
         img = img[:, :, 0]
 
@@ -23,7 +25,15 @@ for fname in fnames:
     img = np.round(img).astype(np.uint8)
 
     clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=(8,8))
-    img = clahe.apply(img)
 
-    img = cv2.medianBlur(img, median_blur_diam)
+    if img.ndim == 3:
+        hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
+        hsv[:, :, 2] = clahe.apply(hsv[:, :, 2])
+        img = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
+    else:
+        img = clahe.apply(img)
+
+    if median_blur_diam > 0:
+        img = cv2.medianBlur(img, median_blur_diam)
+
     cv2.imwrite(fname, img)
