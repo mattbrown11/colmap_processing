@@ -275,7 +275,7 @@ def load_from_file(filename, platform_pose_provider=None):
 
     """
     with open(filename, 'r') as f:
-        calib = yaml.load(f)
+        calib = yaml.safe_load(f)
 
     if calib['model_type'] == 'standard':
         return StandardCamera.load_from_file(filename, platform_pose_provider)
@@ -802,7 +802,7 @@ class StandardCamera(Camera):
 
         """
         with open(filename, 'r') as f:
-            calib = yaml.load(f)
+            calib = yaml.safe_load(f)
 
         assert calib['model_type'] == 'standard'
 
@@ -1126,7 +1126,7 @@ class DepthCamera(StandardCamera):
 
         """
         with open(filename, 'r') as f:
-            calib = yaml.load(f)
+            calib = yaml.safe_load(f)
 
         assert calib['model_type'] == 'depth'
 
@@ -1386,7 +1386,7 @@ class GeoStaticCamera(DepthCamera):
 
         """
         with open(filename, 'r') as f:
-            calib = yaml.load(f)
+            calib = yaml.safe_load(f)
 
         assert calib['model_type'] == 'static'
 
