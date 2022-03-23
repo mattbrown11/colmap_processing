@@ -42,6 +42,12 @@ import numpy as np
 import subprocess
 from math import cos, sin, sqrt
 
+try:
+    from sklearn.preprocessing import PolynomialFeatures
+    sklearn_imported = True
+except ImportError:
+    sklearn_imported = False
+
 # WGS84 constants
 _a = 6378137
 _f = 1/(298257223563/1000000000)
@@ -51,6 +57,157 @@ _e2a = abs(_e2)
 _e4a = np.square(_e2)
 epsilon = np.finfo(float).eps
 _maxrad = 2 * _a / epsilon
+
+
+class FastENUConverter(object):
+    """Fast approximate easting/northing/up conversions for fixed origin.
+
+    The exact conversion equations 'llh_to_enu' and 'enu_to_llh' tend to be
+    numerically accurate to a millimeter but involve extensive computations. In
+    cases where 1) the ENU origin remains fixed and 2) the domain over which
+    conversions are going to be requested is relatived small, a local fit
+    polynomial of the conversion equations can yield a substantial speedup.
+    This is particularly when a large batch of conversions is requested.
+
+    Example:
+    lat_range = [38.1, 38.2]
+    lon_range = [-84.2, -84.1]
+    height_range = [-1000, 1000]
+    lat0 = 38.15
+    lon0 = -84.15
+    h0 = 10
+    accuracy = 1e-2
+    converter = FastENUConverter(lat_range, lon_range, height_range, lat0,
+                                 lon0, h0, accuracy)
+
+    lat = np.random.rand(1000)*(np.diff(lat_range)) + lat_range[0]
+    lon = np.random.rand(1000)*(np.diff(lon_range)) + lon_range[0]
+    h = np.random.rand(1000)*(np.diff(height_range)) + height_range[0]
+
+    enu1 = np.array(converter.llh_to_enu(lat, lon, h))
+
+    enu2 = [llh_to_enu(lat[i], lon[i], h[i], lat0, lon0, h0)
+            for i in range(len(lat))]
+    enu2 = np.array(enu2).T
+    print('Max error', np.abs(enu1 - enu2).max(), 'meters')
+
+    llh = np.array(converter.enu_to_llh(enu2[0], enu2[1], enu2[2]))
+    print('Max error', np.abs(llh[0] - lat).max(), 'degrees')
+    print('Max error', np.abs(llh[1] - lon).max(), 'degrees')
+    print('Max error', np.abs(llh[2] - h).max(), 'meters')
+
+
+    """
+    def __init__(self, lat_range, lon_range, height_range, lat0, lon0, h0,
+                 accuracy=[1e-2, 1e-2, 1e-2]):
+        """
+        :param lat_range: Range of latitudes (degrees) to support.
+        :type lat_range: array-like shape (2,)
+
+        :param lon_range: Range of longitudes (degrees) to support.
+        :type lon_range: array-like shape (2,)
+
+        :lat0: Latitude (degrees) of the origin.
+        :lon0: Longitude (degrees) of the origin.
+        :h0: origin height (meters) above WGS84 ellipsoid.
+
+        :param accuracy: Required accuracy of the approximation (meters).
+        :type accuracy: float
+
+        """
+        n = 10
+        lats = np.linspace(lat_range[0], lat_range[1], n)
+        lons = np.linspace(lon_range[0], lon_range[1], n)
+        hs = np.linspace(height_range[0], height_range[1], n)
+
+        llh = np.zeros((0, 3))
+        for h in hs:
+            LATS, LONS = np.meshgrid(lats, lons)
+            L = len(LATS.ravel())
+            llhi = np.vstack([LATS.ravel(), LONS.ravel(), np.ones(L)*h]).T
+            llh = np.vstack([llh, llhi])
+
+        enu = [llh_to_enu(_[0], _[1], _[2], lat0, lon0, h0) for _ in llh]
+        enu = np.array(enu)
+
+        # Fit easting/north/up polynomial conversions from latitude/longitude/
+        # height.
+        degree = 0
+        while True:
+            degree += 1
+
+            if degree == 10:
+                raise Exception('Failed to fit to required accuracy=%0.3f. '
+                                'Try reducing required accuracy.' %
+                                accuracy)
+
+            self._llh_feature_poly = PolynomialFeatures(degree=degree)
+            features = self._llh_feature_poly.fit_transform(llh)
+
+            coeff = []
+            for i in range(3):
+                coeff.append(np.linalg.lstsq(features, enu[:, i], rcond=None)[0])
+
+            self._llh_coeff = np.array(coeff).T
+
+            fit = np.dot(features, self._llh_coeff)
+            err = np.abs(fit - enu)
+            if np.any(err > accuracy):
+                continue
+
+            break
+
+        # Fit latitude/longitude/height polynomial conversions from easting/
+        # north/up.
+        degree = 1
+        while True:
+            degree += 1
+
+            if degree == 10:
+                raise Exception('Failed to fit to required accuracy=%0.3f. '
+                                'Try reducing required accuracy.' %
+                                accuracy)
+
+            self._enu_feature_poly = PolynomialFeatures(degree=degree)
+            features = self._enu_feature_poly.fit_transform(enu)
+
+            coeff = []
+            for i in range(3):
+                coeff.append(np.linalg.lstsq(features, llh[:, i], rcond=None)[0])
+
+            self._enu_coeff = np.array(coeff).T
+
+            fit = np.dot(features, self._enu_coeff)
+            enu_fit = [llh_to_enu(_[0], _[1], _[2], lat0, lon0, h0)
+                       for _ in fit]
+            if np.any(np.abs(enu_fit - enu) > accuracy):
+                continue
+
+            break
+
+    def llh_to_enu(self, lat, lon, h):
+        if hasattr(lat, '__len__'):
+            llh = np.vstack([lat, lon, h]).T
+            features = self._llh_feature_poly.transform(llh)
+            enu = np.dot(features, self._llh_coeff)
+            return enu[:, 0], enu[:, 1], enu[:, 2]
+        else:
+            llh = np.atleast_2d([lat, lon, h])
+            features = self._llh_feature_poly.transform(llh)
+            enu = np.dot(features, self._llh_coeff)
+            return float(enu[0, 0]), float(enu[0, 1]), float(enu[0, 2])
+
+    def enu_to_llh(self, east, north, up):
+        if hasattr(east, '__len__'):
+            enu = np.vstack([east, north, up]).T
+            features = self._enu_feature_poly.transform(enu)
+            enu = np.dot(features, self._enu_coeff)
+            return enu[:, 0], enu[:, 1], enu[:, 2]
+        else:
+            enu = np.atleast_2d([east, north, up])
+            features = self._enu_feature_poly.transform(enu)
+            llh = np.dot(features, self._enu_coeff)
+            return float(llh[0, 0]), float(llh[0, 1]), float(llh[0, 2])
 
 
 def llh_to_enu(lat, lon, h, lat0, lon0, h0, in_degrees=True, pure_python=True):
