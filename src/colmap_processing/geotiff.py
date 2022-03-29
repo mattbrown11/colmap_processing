@@ -386,16 +386,20 @@ class GeoTIFF(object):
         lon_lat = self.raster_to_lon_lat(points)
 
         if height is None:
-            height = 0
+            if lon_lat.ndim == 2:
+                height = np.zeros(lon_lat.shape[1])
+            else:
+                height = 0
 
         if self.enu_converter is not None:
-            return self.enu_converter.llh_to_enu(lon_lat[1], lon_lat[0],
-                                                 height)
+            return np.array(self.enu_converter.llh_to_enu(lon_lat[1],
+                                                          lon_lat[0], height))
 
         if lon_lat.ndim == 1:
-            return llh_to_enu(lon_lat[1], lon_lat[0], height,
-                              self.origin_latitude, self.origin_longitude,
-                              self.origin_height)
+            return np.array(llh_to_enu(lon_lat[1], lon_lat[0], height,
+                                       self.origin_latitude,
+                                       self.origin_longitude,
+                                       self.origin_height))
 
         xy = [llh_to_enu(lon_lat_[1], lon_lat_[0], height,
                          self.origin_latitude, self.origin_longitude,
