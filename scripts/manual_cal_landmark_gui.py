@@ -49,11 +49,11 @@ from colmap_processing.database import COLMAPDatabase, blob_to_array, \
 
 # ----------------------------------------------------------------------------
 # Landmark annotation GUI workspace path.
-landmark_gui_workspace = '/media/mattb/7e7167ba-ad6f-4720-9ced-b699f49ba3aa/diva_france/workspace'
+landmark_gui_workspace = '/media/workspace'
 
 # Colmap directory where all of the Colmap files will be generated. All images
 # should be placed in a sub-directory 'images'.
-colmap_workspace_path = '/media/mattb/7e7167ba-ad6f-4720-9ced-b699f49ba3aa/diva_france'
+colmap_workspace_path = '/media/colmap'
 
 # Camera model type.
 model = 'OPENCV'
@@ -142,7 +142,7 @@ db.commit()
 db.close()
 
 
-db = COLMAPDatabase('/media/mattb/7e7167ba-ad6f-4720-9ced-b699f49ba3aa/diva_france/colmap_database.db')
+db = COLMAPDatabase('/media/colmap_database.db')
 
 
 # Read and check cameras.

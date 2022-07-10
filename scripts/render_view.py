@@ -58,7 +58,7 @@ from colmap_processing.vtk_util import render_distored_image
 
 
 # ----------------------------------------------------------------------------
-save_dir = '/media/mattb/7e7167ba-ad6f-4720-9ced-b699f49ba3aa1/mutc_uav_collect/calibrated_scene_cameras/new_cameras/2018-03-05.15-25-00.15-30-00.admin.G335/test'
+save_dir = '/media/data/test'
 location = 'test'
 
 

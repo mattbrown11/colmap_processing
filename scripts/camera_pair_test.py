@@ -62,7 +62,7 @@ camera_model2_fname = 'camera_model.yaml'
 ponts_fname = 'points.txt'
 
 #MUTC.
-mesh_fname = '/home/mattb/3d_models/mutc_ply/enu/meshed/mutc.ply'
+mesh_fname = '/home/c.ply'
 
 latitude0 = 0    # degrees
 longitude0 = 0  # degrees

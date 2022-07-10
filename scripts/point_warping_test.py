@@ -17,14 +17,14 @@ from colmap_processing.geo_conversions import enu_to_llh, llh_to_enu, \
 from colmap_processing.static_camera_model import save_static_camera, \
     load_static_camera_from_file, write_camera_krtd_file
 
-camera_model1 = '/home/mattb/projects/DIVA/camera_model_test/2018-03-05.18-05-00.18-10-00.school.G336/camera_model.yaml'
-camera_model2 = '/home/mattb/projects/DIVA/camera_model_test/2018-03-05.18-05-00.18-10-00.hospital.G436/camera_model.yaml'
-base_layer_fname = '/home/mattb/3d_models/mutc_ply/enu/base_layer.tif'
-ponts_fname = '/home/mattb/projects/DIVA/camera_model_test/G336toG436-points.txt'
+camera_model1 = '/home/user/camera_model1.yaml'
+camera_model2 = '/home/user/camera_model2.yaml'
+base_layer_fname = '/home/user/3d_models/base_layer.tif'
+ponts_fname = '/home/user/points.txt'
 
-latitude0 = 39.04977294    # degrees
-longitude0 = -85.52924953  # degrees
-height0 = 205
+latitude0 = 0    # degrees
+longitude0 = 0  # degrees
+height0 = 0
 
 
 def load_camera_model(camera_model):
@@ -235,7 +235,7 @@ base_layer = GeoImage.load_geotiff(base_layer_fname)
 
 # ----------------------------------------------------------------------------
 # Clicked points in both camera1 and base layer.
-res = np.loadtxt('/home/mattb/geo_points_test.txt')
+res = np.loadtxt('/home/user/geo_points_test.txt')
 im_pts0 = res[:, :2]
 llh0 = res[:, 2:]
 

@@ -2,21 +2,21 @@
 # ckwg +31
 # Copyright 2021 by Kitware, Inc.
 # All rights reserved.
-# 
+#
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
-# 
+#
 #  * Redistributions of source code must retain the above copyright notice,
 #    this list of conditions and the following disclaimer.
-# 
+#
 #  * Redistributions in binary form must reproduce the above copyright notice,
 #    this list of conditions and the following disclaimer in the documentation
 #    and/or other materials provided with the distribution.
-# 
+#
 #  * Neither name of Kitware, Inc. nor the names of any contributors may be used
 #    to endorse or promote products derived from this software without specific
 #    prior written permission.
-# 
+#
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS ``AS IS''
 # AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 # IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -72,12 +72,8 @@ def run(args):
 
 def CLI(argv=None):
     import argparse
-    # CamName = 'axisptz2'
-    # CamDir = 'axisptz2_3_retake'
-    # CamModelFN = '../data/NorthStarReach/202102/calibration/{}/camera_models/{}/camera_model.yaml'.format(CamDir, CamName)
-    # MeshFN = '../data/NorthStarReach/202010/archive/202011/mesh.geo.ply'
-    MeshFN = '../data/KHQ/Construction/20190714/202009/geo/khq_mesh.ply'
-    CamModelFN = '../data/KHQ/Construction/20190714/202103/frames/000128.cam.yml'
+    MeshFN = '../data/mesh.ply'
+    CamModelFN = '../000128.cam.yml'
     # LLH0NSR = np.array([42.43722062, -84.02781521, 251.412]) # North Star Reach origin in LLH
     LLH0NSR = np.array([42.86453893, -73.77125128, 73]) # KHQ
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)

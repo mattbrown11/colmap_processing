@@ -7,11 +7,11 @@ import matplotlib.pyplot as plt
 import glob
 import natsort
 
-fname = '/mnt/ten_tb_data/kamera/Calibration imagery/fl08/colmap/stereo/patch-match.cfg'
+fname = '/mnt/data/colmap/stereo/patch-match.cfg'
 with open(fname, 'r') as fp:
     patch_match_lines = fp.readlines()
 
-fname = '/mnt/ten_tb_data/kamera/Calibration imagery/fl08/colmap/stereo/fusion.cfg'
+fname = '/mnt/data/colmap/stereo/fusion.cfg'
 with open(fname, 'r') as fp:
     fusion_lines = fp.readlines()
 
@@ -33,13 +33,13 @@ fnames = [fnames[_] for _ in ind]
 
 nl2 = '__auto__, 20\n'
 
-fname = '/mnt/ten_tb_data/kamera/Calibration imagery/fl08/colmap/stereo/patch-match2.cfg'
+fname = '/mnt/data/colmap/stereo/patch-match2.cfg'
 with open(fname, 'w') as fp:
     for fn in fnames:
         fp.write(fn)
         fp.write(nl2)
 
-fname = '/mnt/ten_tb_data/kamera/Calibration imagery/fl08/colmap/stereo/fusion2.cfg'
+fname = '/mnt/data/colmap/stereo/fusion2.cfg'
 with open(fname, 'w') as fp:
     for fn in fnames:
         fp.write(fn)

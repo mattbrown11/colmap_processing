@@ -49,10 +49,10 @@ from colmap_processing.database import COLMAPDatabase, pair_id_to_image_ids, \
 
 # ----------------------------------------------------------------------------
 # Colmap directory.
-colmap_dir = '/mnt/data2tb/adapt/colmap'
+colmap_dir = '/mnt/data/colmap'
 
 # Source database.
-source_db_fname = '/mnt/data2tb/adapt/colmap/database.db'
+source_db_fname = '/mnt/data/colmap/database.db'
 
 # Path to the sparse dir containing images.bin, cameras.bin, and points3D.bin.
 sparse_dir = '%s/sparse/0' % colmap_dir
@@ -145,7 +145,7 @@ for name in new_db:
 
 
 if False:
-    fname = '/mnt/data2tb/adapt/colmap/Circle-sUAS-Visible-Responder-2017_05_05_afternoon_flight.db'
+    fname = '/mnt/data/database.db'
     db = COLMAPDatabase.connect(fname)
 
     rows = db.execute("SELECT * FROM cameras")

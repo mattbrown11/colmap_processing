@@ -254,7 +254,7 @@ for manual_points_fname in manual_points_fnames:
 
 if False:
     # Draw manual key points.
-    save_dir = 'calamityville/'
+    save_dir = '/'
     for key in manual_matches:
         image_id1,image_id2 = key
         img1 = cv2.imread(image_fnames[image_id1 - 1])[:,:,::-1].copy()

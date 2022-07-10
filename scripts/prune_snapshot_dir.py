@@ -2,7 +2,7 @@ import glob
 import shutil
 import time
 
-snap_shot_dir = '/mnt/data10tb/kamera_fl8/colmap_ir/snapshots/*'
+snap_shot_dir = '/mnt/data/colmap/snapshots/*'
 num_to_keep = 10
 
 while True:
@@ -12,5 +12,5 @@ while True:
     for d in dirs[:-num_to_keep]:
         print('Deleting \'%s\'' % d)
         shutil.rmtree(d)
-        
+
     time.sleep(10)

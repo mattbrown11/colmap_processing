@@ -59,7 +59,6 @@ from colmap_processing.static_camera_model import save_static_camera, \
 
 # ----------------------------------------------------------------------------
 mesh_fname = 'coarse.ply'
-#mesh_fname = '/home/mattb/cville_3d/meshed/cement_factory.ply'
 save_dir = 'reference_views'
 
 # Base path to the colmap directory.

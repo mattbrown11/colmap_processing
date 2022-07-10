@@ -65,17 +65,17 @@ from colmap_processing.camera_models import quaternion_from_matrix, \
 
 # ----------------------------------------------------------------------------
 # Landmark annotation GUI workspace path.
-landmark_gui_workspace = '/home/mattb/libraries/georegistration_guis/data/workspace'
+landmark_gui_workspace = '/home/user/libraries/georegistration_guis/data/workspace'
 
 # Image Directory.
-image_dir = '/home/mattb/libraries/georegistration_guis/data/m2-alb-frames'
+image_dir = '/home/user/libraries/georegistration_guis/data/frames'
 
 # Directory to save camera models within.
-save_dir = '/home/mattb/libraries/georegistration_guis/data/m2-alb-frames_camera_models'
+save_dir = '/home/user/libraries/georegistration_guis/data/camera_models'
 
 # Define the origin of the easting/northing/up coordinate system.
-lat0 = 42.661076
-lon0 = -73.771552
+lat0 = 0
+lon0 = 0
 h0 = 0
 
 # VTK renderings are limited to monitor resolution (width x height).
@@ -287,16 +287,7 @@ def calibrate_camera_id(image_id, save_dir_, fix_aspect_ratio=True,
 
 
 if True:
-    img_to_process = ['2018-10-14.13-00-01.13-05-01.gdb.G639',
-                      '2018-11-10.13-00-01.13-05-01.lp.Greo3',
-                      '2018-11-10.13-00-01.13-05-00.lp.Greo2',
-                      '2018-10-14.13-00-00.13-05-00.gdb.Gnnn',
-                      '2018-11-10.13-00-01.13-05-01.lp.Greo1',
-                      '2018-09-01.13-30-01.13-35-01.alb.G327',
-                      '2018-10-14.13-00-01.13-05-01.gdb.G638',
-                      '2018-10-04.13-00-01.13-05-01.alb.G421',
-                      '2018-09-09.13-40-01.13-45-01.alb.G421',
-                      '2018-11-10.13-00-01.13-05-01.lp.Gptz']
+    img_to_process = ['images',]
     image_ids = [img_fname_to_cam_id[i] for i in img_to_process]
 else:
     image_ids = images.keys()

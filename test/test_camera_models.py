@@ -54,10 +54,9 @@ from colmap_processing.platform_pose import PlatformPoseInterp
 # If you are placing your data within the 'data' folder of this repository,
 # this will be mapped to '/home_user/adapt_postprocessing/data' inside the
 # Docker container.
-data_dir = '/media/mattb/7e7167ba-ad6f-4720-9ced-b699f49ba3aa/noaa_adapt/change_detection'
+data_dir = '/media/data'
 
-image_subdirs = ['Circle-sUAS-Visible-Responder-2017_05_05_afternoon_flight',
-                 'Circle-sUAS-Visible-Responder-2017_05_08_noon_flight']
+image_subdirs = ['1', '2']
 
 # COLMAP data directory.
 images_bin_fname = '%s/images.bin' % data_dir
