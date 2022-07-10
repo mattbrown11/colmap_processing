@@ -13,6 +13,6 @@ docker run -it \
     colmap image_undistorter \
         --image_path images0 \
         --input_path sparse/$2 \
-        --output_path dense \
+        --output_path . \
         --output_type COLMAP \
-        --max_image_size 6000
+        --max_image_size 4000

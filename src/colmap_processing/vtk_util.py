@@ -41,6 +41,10 @@ import matplotlib.pyplot as plt
 # from matplotlib.collections import PatchCollection
 # from mpl_toolkits.mplot3d import Axes3D
 
+from colmap_processing.camera_models import StandardCamera, \
+    quaternion_from_matrix
+from colmap_processing.platform_pose import PlatformPoseFixed
+
 
 class Camera(object):
     def __init__(self, res_x, res_y, vfov, pos, rmat):
@@ -364,6 +368,13 @@ class Camera(object):
             return X, Y, Z, depth, image
         else:
             return X, Y, Z, depth
+
+    def to_standard_camera(self):
+        quat = quaternion_from_matrix(self.rmat.T)
+        platform_pose_provider = PlatformPoseFixed(self.pos, quat)
+        cm = StandardCamera(self.res_x, self._res_y, self.kmat, np.zeros(5),
+                            [0, 0, 0], [0, 0, 0, 1], platform_pose_provider)
+        return cm
 
 
 class CameraPanTilt(Camera):

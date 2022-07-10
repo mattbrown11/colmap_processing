@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 
-fnames = glob.glob('//mnt/data2tb/ursa/3d/GuardianCenter/images0/exterior_loop/*.JPG')
+fnames = glob.glob('/mnt/data/*.JPG')
 
 stretch_percentiles = [0.1, 99.9]
 monochrome = False

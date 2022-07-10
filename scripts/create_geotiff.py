@@ -43,6 +43,8 @@ import trimesh
 import math
 import PIL
 from osgeo import osr, gdal
+from scipy.spatial import ConvexHull
+from scipy.interpolate import griddata
 
 import colmap_processing.vtk_util as vtk_util
 from colmap_processing.geo_conversions import enu_to_llh
@@ -50,8 +52,8 @@ from colmap_processing.geo_conversions import enu_to_llh
 
 # ----------------------------------------------------------------------------
 if True:
-    mesh_fname = 'geo.ply'
-    save_dir = 'meshed_models'
+    mesh_fname = '/enu.ply'
+    save_dir = '/out'
 
     # Latitude and longitude associated with (0, 0, 0) in the model.
     latitude0 = 0      # degrees
@@ -61,9 +63,11 @@ if True:
     # Set GSD of orthographic base layer.
     gsd = 0.05  # meters
 
+    determine_dem = False
+
 
 # VTK renderings are limited to monitor resolution (width x height).
-monitor_resolution = (1080, 1080)
+monitor_resolution = (800, 800)
 # ----------------------------------------------------------------------------
 
 
@@ -89,9 +93,9 @@ delta_xyz = np.diff(model_bounds)
 model_reader = vtk_util.load_world_model(mesh_fname)
 
 
-def get_ortho_image(xbnds, ybnds, res_x, res_y):
+def get_ortho_image(xbnds, ybnds, res_x, res_y, from_bottom=False):
     # Model orthographic as camera that is 'alt' meters high.
-    alt = 1e4*float(delta_xyz[2]) + model_bounds[2, 1]
+    alt = 1e5 + float(delta_xyz[2]) + model_bounds[2, 1]
     #alt = 1e3
 
     # Position of the camera.
@@ -102,9 +106,18 @@ def get_ortho_image(xbnds, ybnds, res_x, res_y):
 
     dy = float(np.abs(np.diff(ybnds)))
     vfov = 2*np.arctan(dy/2/alt)*180/np.pi
-    ortho_camera = vtk_util.CameraPanTilt(res_x, res_y, vfov, pos, 0, -90)
 
-    clipping_range = [alt, alt + float(delta_xyz[2])]
+    if from_bottom:
+        pos[2] *= -1
+        pan = 180
+        tilt = 90
+    else:
+        pan = 0
+        tilt = -90
+
+    ortho_camera = vtk_util.CameraPanTilt(res_x, res_y, vfov, pos, pan, tilt)
+
+    clipping_range = [alt, alt + float(delta_xyz[2]) + 1]
     #clipping_range = [1e3, 2e4]
     img = ortho_camera.render_image(model_reader,
                                     clipping_range=clipping_range,
@@ -115,6 +128,11 @@ def get_ortho_image(xbnds, ybnds, res_x, res_y):
     ret = ortho_camera.unproject_view(model_reader,
                                       clipping_range=clipping_range)
     z = ret[2] + height0
+
+    if from_bottom:
+        img = np.fliplr(img)
+        z = np.fliplr(z)
+
     return img, z
 
 
@@ -123,6 +141,9 @@ full_res_x = int(math.ceil(delta_xyz[0]/gsd))
 full_res_y = int(math.ceil(delta_xyz[1]/gsd))
 ortho_image = np.zeros((full_res_y, full_res_x, 3), dtype=np.uint8)
 dem = np.zeros((full_res_y, full_res_x), dtype=np.float)
+
+if determine_dem:
+    underside_dem = np.zeros((full_res_y, full_res_x), dtype=np.float)
 
 num_cols = int(math.ceil(full_res_x/monitor_resolution[0]))
 num_rows = int(math.ceil(full_res_y/monitor_resolution[1]))
@@ -140,9 +161,75 @@ for i in range(num_rows):
         ortho_image[indr[i]:indr[i+1], indc[j]:indc[j+1], :] = ret[0]
         dem[indr[i]:indr[i+1], indc[j]:indc[j+1]] = ret[1]
 
+        if determine_dem:
+            ret = get_ortho_image(xbnds_array[j:j+2],
+                                  ybnds_array[i:i+2],
+                                  int(indc[j+1] - indc[j]),
+                                  int(indr[i+1] - indr[i]), from_bottom=True)
+            underside_dem[indr[i]:indr[i+1], indc[j]:indc[j+1]] = ret[1]
+
 
 print('DEM elevation ranges from %0.4f to %0.4f' %
       (dem.ravel().min(), dem.ravel().max()))
+
+
+# ----------------------------------------------------------------------------
+if False:
+    # Determine the DEM for the ground level.
+    # Radius of curvature
+    scale = 10 # m
+
+    xmin = float(pts[0].min()); xmax = float(pts[0].max())
+    ymin = float(pts[1].min()); ymax = float(pts[1].max())
+    xc = (xmin + xmax)/2
+    yc = (ymin + ymax)/2
+    zmax = 1000000000
+    pts1 = np.array(pts.copy())
+    tmp = np.array([[xmin, xmin, xmax, xmax],
+                    [ymin, ymax, ymax, ymin],
+                    [zmax + 1, zmax + 1, zmax + 1, zmax + 1]])
+    pts1 = np.hstack([pts1, tmp])
+    pts_ = pts1.copy()
+
+    r = np.sqrt((xmax - xc)**2 + (ymax - yc)**2) + 1e-6
+    pts_[2] = pts_[2] - scale*np.sqrt(r**2 - (pts1[0] - xc)**2 - (pts1[1] - yc)**2)
+
+    hull = ConvexHull(pts_.T)
+
+    #plt.plot(pts[0, hull.vertices], pts[1, hull.vertices], 'r.')
+
+    x = np.linspace(xmin, xmax, full_res_x + 1)
+    x = (x[1:] + x[:-1])/2
+    y = np.linspace(ymax, ymin, full_res_y + 1)
+    y = (y[1:] + y[:-1])/2
+    X, Y = np.meshgrid(x, y)
+
+    vertices = hull.vertices
+    vertices = vertices[vertices < pts.shape[1]]
+    dem1 = griddata(pts1[:2, vertices].T, pts1[2, vertices],
+                    (X, Y), method='linear', fill_value=0) + height0
+
+    fig = plt.figure(num=None, figsize=(15.3, 10.7), dpi=80)
+    plt.imshow(dem1); plt.colorbar()
+    fig.tight_layout()
+    plt.savefig('%s/ground_dem.jpg' % save_dir)
+    fig = plt.figure(num=None, figsize=(15.3, 10.7), dpi=80)
+    plt.imshow(dem); plt.colorbar()
+    fig.tight_layout()
+    plt.savefig('%s/dem.jpg' % save_dir)
+
+    mask = dem == dem.min()
+    diff = dem - dem1
+    diff[mask] = 0
+    fig = plt.figure(num=None, figsize=(15.3, 10.7), dpi=80)
+    plt.imshow(diff); plt.colorbar()
+    fig.tight_layout()
+    plt.savefig('%s/just_buildings.jpg' % save_dir)
+
+    im = PIL.Image.fromarray(dem1.astype(np.float32), mode='F') # float32
+    depth_map_fname = '%s/base_layer.ground.dem.tif' % save_dir
+    im.save(depth_map_fname)
+# ----------------------------------------------------------------------------
 
 
 # ----------------------------------------------------------------------------
@@ -174,6 +261,44 @@ im.save(depth_map_fname)
 # ----------------------------------------------------------------------------
 
 
+def clahe(img, clim=2):
+#    img = img.astype(float)
+#    img -= np.percentile(img.ravel(), 0.1)
+#    img[img < 0] = 0
+#    img /= np.percentile(img.ravel(), 99.9)/255
+#    img[img > 255] = 255
+#    img = np.round(img).astype(np.uint8)
+    clahe = cv2.createCLAHE(clipLimit=clim, tileGridSize=(128, 128))
+    if img.ndim == 3:
+        hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
+        hsv[:, :, 2] = clahe.apply(hsv[:, :, 2])
+
+        return cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
+    else:
+        return clahe.apply(img)
+
+
+def equalize_hist(img):
+    img = img.astype(float)
+    img -= np.percentile(img.ravel(), 0.1)
+    img[img < 0] = 0
+    img /= np.percentile(img.ravel(), 99.9)/255
+    img[img > 255] = 255
+    img = np.round(img).astype(np.uint8)
+    if img.ndim == 3:
+        hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
+        hsv[:, :, 2] = cv2.equalizeHist(hsv[:, :, 2])
+
+        return cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
+    else:
+        return clahe.apply(img)
+
+
+#ortho_image = ortho_image0.copy()
+ortho_image = clahe(ortho_image)
+#ortho_image = equalize_hist(ortho_image)
+
+
 # ----------------------------------------------------------------------------
 # Save GeoTIFF
 geotiff_fname = '%s/base_layer.tif' % save_dir
@@ -182,6 +307,7 @@ wgs84_cs = osr.SpatialReference()
 wgs84_cs.SetWellKnownGeogCS("WGS84")
 wgs84_wkt = wgs84_cs.ExportToPrettyWkt()
 gdal_settings = ['COMPRESS=JPEG', 'JPEG_QUALITY=%i' % 90]
+#gdal_settings = []
 ds = gdal_drv.Create(geotiff_fname, ortho_image.shape[1], ortho_image.shape[0],
                      ortho_image.ndim, gdal.GDT_Byte, gdal_settings)
 ds.SetProjection(wgs84_cs.ExportToWkt())

@@ -215,6 +215,13 @@ class GeoTIFF(object):
 
         self.gdal_ds = dest_ds
 
+    @property
+    def extent_meters(self):
+        points = np.array([[0, 0, self.res_x, self.res_x],
+                           [0, self.res_y, self.res_y, 0]])
+        xy = self.raster_to_meters(points)
+        return xy[0].min(), xy[0].max(), xy[1].min(), xy[1].max()
+
     def save(self, fname, compression=None):
         """Save GeoTIFF to file.
 
@@ -401,7 +408,7 @@ class GeoTIFF(object):
                                        self.origin_longitude,
                                        self.origin_height))
 
-        xy = [llh_to_enu(lon_lat_[1], lon_lat_[0], height,
+        xy = [llh_to_enu(lon_lat_[1], lon_lat_[0], height[0],
                          self.origin_latitude, self.origin_longitude,
                          self.origin_height)
               for lon_lat_ in lon_lat.T]

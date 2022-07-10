@@ -63,7 +63,7 @@ from colmap_processing.platform_pose import PlatformPoseFixed
 
 # ----------------------------------------------------------------------------
 # Reference image.
-cm_dir = '/mnt/homenas2/mutc_uav_collect/calibrated_scene_cameras/indoor/2018-03-11.11-20-00.11-25-00.school.G421'
+cm_dir = '/mnt'
 image_fname = '%s/ref_view.jpg' % cm_dir
 
 # File containing correspondences between image points (columns 0 an d1) and

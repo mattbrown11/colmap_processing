@@ -357,7 +357,15 @@ def stitch_images(src_list, dst_cm, dst_t, interpolation=1, block_size=1,
     :type homog_approx: bool
 
     """
-    dst_img = np.zeros((dst_cm.height,dst_cm.width,3), np.uint8)
+    out_dtype = src_list[0][1].dtype
+    if out_dtype == np.uint8:
+        out_channels = 3
+        dst_img = np.zeros((dst_cm.height, dst_cm.width, out_channels),
+                           out_dtype)
+    else:
+        out_channels = 1
+        dst_img = np.zeros((dst_cm.height, dst_cm.width), out_dtype)
+
     for i in range(len(src_list)):
         src_cm, src_img, src_t = src_list[i]
 
@@ -368,14 +376,17 @@ def stitch_images(src_list, dst_cm, dst_t, interpolation=1, block_size=1,
                                 block_size=block_size,
                                 homog_approx=homog_approx)
 
-        if img.ndim == 2:
-            img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+        if out_channels == 3:
+            if img.ndim == 2:
+                img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
 
-        # Couldn't find a more elegant/efficient way to hangle a 2-D mask with
-        # an RGB image.
-        mask2 = np.zeros_like(dst_img, dtype=np.bool)
-        mask2[:,:,0] = mask2[:,:,1] = mask2[:,:,2] = mask
+            # Couldn't find a more elegant/efficient way to hangle a 2-D mask with
+            # an RGB image.
+            mask2 = np.zeros_like(dst_img, dtype=np.bool)
+            mask2[:,:,0] = mask2[:,:,1] = mask2[:,:,2] = mask
 
-        dst_img[mask2] = img[mask2]
+            dst_img[mask2] = img[mask2]
+        else:
+            dst_img[mask] = img[mask]
 
     return dst_img

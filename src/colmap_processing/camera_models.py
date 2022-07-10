@@ -66,8 +66,19 @@ import colmap_processing.dp as dp
 try:
     # Use ROS tf.transformations for rotation operations.
     from tf.transformations import euler_from_quaternion, quaternion_multiply, \
-        quaternion_from_matrix, quaternion_matrix, quaternion_from_euler, \
+        quaternion_matrix, quaternion_from_euler, \
         quaternion_inverse, euler_matrix
+
+    import tf.transformations.quaternion_from_matrix as quaternion_from_matrix4x4
+
+    def quaternion_from_matrix(R):
+        if R.shape != (4, 4):
+            R_ = R
+            R = np.identity(4)
+            R[:3, :3] = R_
+
+        return quaternion_from_matrix4x4(R)
+
 except ImportError:
     # Instead, use the pip installed transformations.py, which isn't compatible
     # with Python 2. However, this requires some modifications to the
@@ -286,6 +297,11 @@ def load_from_file(filename, platform_pose_provider=None):
     if calib['model_type'] == 'static':
         return GeoStaticCamera.load_from_file(filename, platform_pose_provider)
 
+    if calib['model_type'] == 'azel':
+        return AzelCamera.load_from_file(filename, platform_pose_provider)
+
+    raise Exception()
+
 
 def ray_intersect_plane(plane_point, plane_normal, ray_pos, ray_dir,
                         epsilon=1e-6):
@@ -362,6 +378,8 @@ class Camera(object):
         else:
             self._platform_pose_provider = platform_pose_provider
 
+        self._depth_map = None
+
     @property
     def width(self):
         return self._width
@@ -377,6 +395,14 @@ class Camera(object):
     @height.setter
     def height(self, value):
         self._height = int(value)
+
+    @property
+    def depth_map(self):
+        return self._depth_map
+
+    @depth_map.setter
+    def depth_map(self, value):
+        self._depth_map = value
 
     @property
     def platform_pose_provider(self):
@@ -737,6 +763,30 @@ class Camera(object):
             self._images.append(raw_image)
             self._image_times = np.hstack([self._image_times,t])
 
+    def unproject_to_depth(self, points, t=None):
+        """See Camera.unproject_to_depth documentation.
+
+        """
+        points = self._unproject_to_depth(points, self.depth_map, t=None)
+        return points
+
+    def save_depth_viz(self, fname):
+        depth_image = self.depth_map.copy()
+        v = depth_image[np.isfinite(depth_image)]
+        if len(v) > 0:
+            vmin = np.percentile(v, 1)
+            vmax = np.percentile(v, 99)
+            depth_image -= vmin
+            depth_image[depth_image < 0] = 0
+            v = vmax - vmin
+            if v > 0:
+                depth_image /= v/255
+
+        depth_image = np.round(depth_image).astype(np.uint8)
+
+        depth_image = cv2.applyColorMap(depth_image, cv2.COLORMAP_JET)
+        cv2.imwrite(fname, depth_image[:, :, ::-1])
+
 
 class StandardCamera(Camera):
     """Standard camera model.
@@ -1058,7 +1108,28 @@ class StandardCamera(Camera):
         tvec = pose_mat[:,3]
         im_pts = cv2.projectPoints(points.T, rvec, tvec, self._K,
                                    self._dist)[0]
-        return np.squeeze(im_pts, 1).T
+        im_pts = np.squeeze(im_pts, 1).T
+
+        # Make sure we aren't seeing behind the camera.
+        center = self.cx, self.cy
+        ray0 = self.unproject(center, t, normalize_ray_dir=True)[1].ravel()
+        w, h = self.width, self.height
+        min_ray_cos = 1
+        for x,y in [[0,0],[w,0],[w,h],[0,h]]:
+            ray1 = self.unproject([x,  y], t, normalize_ray_dir=True)[1]
+            ray1 = ray1.ravel()
+            ray_cosi = np.dot(ray0, ray1)
+            min_ray_cos = np.minimum(min_ray_cos, ray_cosi)
+
+         # Make homogeneous
+        points = np.vstack([points, np.ones(points.shape[1])])
+        points = np.dot(pose_mat, points)
+        points /= np.sqrt(np.sum(points**2, 0))
+        ind = points[2] < min_ray_cos
+
+        im_pts[:, ind] = -100000
+
+        return im_pts
 
     def unproject(self, points, t=None, normalize_ray_dir=True):
         """See Camera.unproject documentation.
@@ -1208,23 +1279,6 @@ class DepthCamera(StandardCamera):
                                    os.path.split(filename)[0])
                 self.save_depth_viz(depth_viz_fname)
 
-    def save_depth_viz(self, fname):
-        depth_image = self.depth_map.copy()
-        v = depth_image[np.isfinite(depth_image)]
-        if len(v) > 0:
-            vmin = np.percentile(v, 1)
-            vmax = np.percentile(v, 99)
-            depth_image -= vmin
-            depth_image[depth_image < 0] = 0
-            v = vmax - vmin
-            if v > 0:
-                depth_image /= v/255
-
-        depth_image = np.round(depth_image).astype(np.uint8)
-
-        depth_image = cv2.applyColorMap(depth_image, cv2.COLORMAP_JET)
-        cv2.imwrite(fname, depth_image[:, :, ::-1])
-
     def __str__(self):
         string = ['model_type: depth\n']
         string.append(super(DepthCamera, self).__str__())
@@ -1241,20 +1295,6 @@ class DepthCamera(StandardCamera):
         string.append(''.join(['camera_position: ',repr(tuple(self._cam_pos)),
                                '\n']))
         return ''.join(string)
-
-    @property
-    def depth_map(self):
-        """Current queue of images captured from ROS messages
-
-        """
-        return self._depth_map
-
-    def unproject_to_depth(self, points, t=None):
-        """See Camera.unproject_to_depth documentation.
-
-        """
-        points = self._unproject_to_depth(points, self.depth_map, t=None)
-        return points
 
     def _unproject_to_depth(self, points, depth_map, t=None):
         """Unproject image points into the world at a particular time.

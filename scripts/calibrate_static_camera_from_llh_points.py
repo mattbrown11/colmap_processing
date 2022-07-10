@@ -72,7 +72,7 @@ save_dir = os.path.split(image_fname)[0]
 location = 'khq'
 
 # VTK renderings are limited to monitor resolution (width x height).
-monitor_resolution = (2200, 1200)
+monitor_resolution = (1200, 1200)
 
 dist = [0, 0, 0, 0]
 optimize_k1 = True
