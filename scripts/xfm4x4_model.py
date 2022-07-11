@@ -50,7 +50,7 @@ def xfm_img(img, s, R, t):
     ti = s*img.tvec - U.dot(t)
     return Image(id=img.id, qvec=qi, tvec=ti,
                  camera_id=img.camera_id, name=img.name,
-                 xys=img.xys, point3D_ids=img.point3D_ids) 
+                 xys=img.xys, point3D_ids=img.point3D_ids)
 
 
 def xfm_pt(pt, s, R, t):
@@ -81,15 +81,15 @@ def run(args):
 
 def CLI(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('-i:p', '--input_path', metavar='path', default='../data/GuardianCenter/20201028/colmap/20201125/sparse/org',
+    parser.add_argument('-i:p', '--input_path', metavar='path',
                         help='path/to/colmap/model/folder; default=%(default)s')
     parser.add_argument('-i:x', '--input_ext', metavar='ext', choices=['.bin','.txt'], default='.bin', help='input model format: %(choices)s; default=%(default)s')
     parser.add_argument('-l', '--log', metavar='level', choices=['CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG', 'NOTSET'],
                         default='WARNING', help='logging verbosity level: %(choices)s; default=%(default)s')
-    parser.add_argument('-o:p', '--output_path', metavar='path', default='../data/GuardianCenter/20201028/colmap/20201125/sparse/geo',
+    parser.add_argument('-o:p', '--output_path', metavar='path',
                         help='path/to/output/folder; default=%(default)s')
     parser.add_argument('-o:x', '--output_ext', metavar='ext', default='.bin', help='output model format; default=%(default)s')
-    parser.add_argument('-x', '--xfm', metavar='path', default='../data/GuardianCenter/20201028/colmap/20201125/geo/xfm.tsv',
+    parser.add_argument('-x', '--xfm', metavar='path',
                         help='path/to/4x4/similarity/transform; default=%(default)s')
     args = parser.parse_args(argv)
     logging.basicConfig(level=args.log)
