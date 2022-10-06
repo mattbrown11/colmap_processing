@@ -63,7 +63,7 @@ import colmap_processing.dp as dp
 from colmap_processing.camera_models import ray_intersect_plane
 
 
-def horn(P, Q):
+def horn(P, Q, fit_scale=True, fit_translation=True):
     """Method of Horn.
 
     :param P: Initial point cloud.
@@ -94,28 +94,40 @@ def horn(P, Q):
     xyz1[3, :] = 1
     xyz2 = np.dot(H, xyz1)
 
-    s2, R2, t2 = horn(xyz1[:3], xyz2)
+    # Scale, rotation, translation
+    s2, R2, t2 = horn(xyz1[:3], xyz2, fit_scale=True, fit_translation=True)
     print(s, s2)
-    print(R[:3, :3], R2)
+    print(R[:3, :3], '\n', R2)
     print(t, t2)
 
-
-
-    H = np.dot(np.dot(T, R), S)
+    # Only rotation
+    xyz2 = np.dot(R[:3, :3], xyz1[:3])
+    R2 = horn(xyz1[:3], xyz2, fit_scale=False, fit_translation=False)[1]
+    print(R[:3, :3], '\n', R2)
 
     """
     if P.shape != Q.shape:
         print("Matrices P and Q must be of the same dimensionality")
 
-    P0 = np.mean(P, axis=1)
-    Q0 = np.mean(Q, axis=1)
-    A = P - np.outer(P0, np.ones(P.shape[1]))
-    B = Q - np.outer(Q0, np.ones(Q.shape[1]))
-    s = np.sqrt(np.mean(B.ravel()**2)) / np.sqrt(np.mean(A.ravel()**2))
+    if fit_translation:
+        P0 = np.mean(P, axis=1)
+        Q0 = np.mean(Q, axis=1)
+        A = P - np.outer(P0, np.ones(P.shape[1]))
+        B = Q - np.outer(Q0, np.ones(Q.shape[1]))
+    else:
+        A = P
+        B = Q
 
-    # Apply scale.
-    A = s*A
-    P0 = P0*s
+    if fit_scale:
+        s = np.sqrt(np.mean(B.ravel()**2)) / np.sqrt(np.mean(A.ravel()**2))
+
+        # Apply scale.
+        A = s*A
+
+        if fit_translation:
+            P0 = P0*s
+    else:
+        s = 1
 
     C = np.dot(A, B.transpose())
     U, S, V = np.linalg.svd(C)
@@ -125,7 +137,12 @@ def horn(P, Q):
         L[2][2] *= -1
 
     R = np.dot(V.transpose(), np.dot(L, U.transpose()))
-    t = np.dot(-R, P0) + Q0
+
+    if fit_translation:
+        t = np.dot(-R, P0) + Q0
+    else:
+        t = np.zeros(len(P))
+
     return (s, R, t)
 
 
