@@ -69,7 +69,7 @@ try:
         quaternion_matrix, quaternion_from_euler, \
         quaternion_inverse, euler_matrix
 
-    import tf.transformations.quaternion_from_matrix as quaternion_from_matrix4x4
+    from tf.transformations import quaternion_from_matrix as quaternion_from_matrix4x4
 
     def quaternion_from_matrix(R):
         if R.shape != (4, 4):
