@@ -48,6 +48,10 @@ try:
 except ImportError:
     sklearn_imported = False
 
+# colmap_processing imports
+from colmap_processing.rotations import quaternion_multiply
+
+
 # WGS84 constants
 _a = 6378137
 _f = 1/(298257223563/1000000000)
@@ -57,6 +61,9 @@ _e2a = abs(_e2)
 _e4a = np.square(_e2)
 epsilon = np.finfo(float).eps
 _maxrad = 2 * _a / epsilon
+
+deg2rad = np.pi/180
+rad2deg = 180/np.pi
 
 
 class FastENUConverter(object):
@@ -361,6 +368,71 @@ def enu_to_llh(east, north, up, lat0, lon0, h0, in_degrees=True,
         lon = lon*180/np.pi
 
     return [lat,lon,h]
+
+
+_cached1 = _a*(1-_e2)
+def dlat_dlon_per_meter(lat, in_degrees=True):
+    """Return latitude and longitude degrees change per meter east and north.
+
+    :param lat:
+    :type lat:
+
+    :param lon:
+    :type lon:
+
+    TEST:
+    dt = 1e-3
+    lat = 45.0
+    lon = 10.0
+    enu = llh_to_enu(lat + dt, lon, 0, lat, lon, 0)
+    print(enu[1]/dt)
+    enu = llh_to_enu(lat, lon + dt, 0, lat, lon, 0)
+    print(enu[0]/dt)
+
+    """
+    if in_degrees:
+        lat_ = lat*deg2rad
+
+    east = _cached1*(1 - _e2*sin(lat_)**2)**(-3/2)
+
+    # Parameter (or reduced) latitude.
+    beta = np.arctan((1-_f)*np.tan(lat_))
+
+    north = _a*np.cos(beta)
+
+    if in_degrees:
+        east = east*deg2rad
+        north = north*deg2rad
+
+    return east, north
+
+
+def ned_quat_to_enu_quat(quat):
+    """
+    :param quat: ROS-standard quaternion (x,y,z,w) that represents a rotation
+        of the NED coordinate system into a moving coordinate system.
+    :type quat: 4-array
+
+    :return: ROS-standard quaternion (x,y,z,w) that represents a rotation
+        of the NED coordinate system into a moving coordinate system.
+    :rtype: 4-array
+
+    """
+    return quaternion_multiply([np.sqrt(2)/2,np.sqrt(2)/2,0,0], quat)
+
+
+def enu_quat_to_ned_quat(quat):
+    """
+    :param quat: ROS-standard quaternion (x,y,z,w) that represents a rotation
+        of the NED coordinate system into a moving coordinate system.
+    :type quat: 4-array
+
+    :return: ROS-standard quaternion (x,y,z,w) that represents a rotation
+        of the NED coordinate system into a moving coordinate system.
+    :rtype: 4-array
+
+    """
+    return quaternion_multiply([np.sqrt(2)/2,np.sqrt(2)/2,0,0], quat)
 
 
 def ecef_to_llh(X, Y, Z, in_degrees=True):

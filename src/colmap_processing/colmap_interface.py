@@ -522,7 +522,7 @@ def rotmat2qvec(R):
     return qvec
 
 
-def standard_cameras_from_colmap(cameras, images=None):
+def standard_cameras_from_colmap(cameras, images=None, image_times=None):
     """Parse Colmap 'cameras' and 'images' into instances of StandardCamera.
 
     :param cameras: Output from read_cameras_text or read_cameras_binary.
@@ -530,6 +530,11 @@ def standard_cameras_from_colmap(cameras, images=None):
 
     :param images: Output from read_images_text or read_images_binary.
     :type images: dict | None
+
+    :param image_times: If None, image times (seconds) are set to the image
+        index in 'images'. If a dictionary, it should accept image index and
+        return image time in seconds.
+    :type image_times: None | dict
 
     :return: Dictionary indexable by camera_id returning StandardCamera. If
         arguement 'images' is not None, an instance of PlatformPoseProvider is
@@ -561,7 +566,11 @@ def standard_cameras_from_colmap(cameras, images=None):
 
             quat = [quat[1], quat[2], quat[3], quat[0]]
 
-            t = image_id
+            if image_times is None:
+                t = image_id
+            else:
+                t = image_times[image_id]
+
             platform_pose_provider.add_to_pose_time_series(t, pos, quat)
     else:
         platform_pose_provider = None

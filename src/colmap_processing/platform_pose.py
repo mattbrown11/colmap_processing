@@ -199,6 +199,13 @@ class PlatformPoseInterp(PlatformPoseProvider):
             #print('Time:', t, 'pose:', pose)
             return [pose[:3], pose[3:]]
 
+    @property
+    def times(self):
+        """Return times at which pose is exactly specified.
+
+        """
+        return self._pose_time_series[:,0]
+
     def pos(self, t):
         """See PlatformPose documentation.
 
