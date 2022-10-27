@@ -99,6 +99,7 @@ def horn(P, Q, fit_scale=True, fit_translation=True):
     print(s, s2)
     print(R[:3, :3], '\n', R2)
     print(t, t2)
+    print('Max error:', np.max(np.abs(np.dot(R[:3, :3], s*xyz1[:3, :]).T + t - xyz2.T)))
 
     # Only rotation
     xyz2 = np.dot(R[:3, :3], xyz1[:3])
@@ -193,6 +194,34 @@ def cam_depth_map_plane(camera_model, plane_point, plane_normal):
 
     depth_map = np.reshape(depth, X.shape)
     return depth_map
+
+
+def get_rvec_btw_times(cm, t1, t2):
+    """Return rotation vector defined in the camera coordinate system.
+
+    Calculate the rotation vector corresponding to the rotation of the camera
+    frame from time t1 to t2. The rotation is defined within the coordinate
+    system of the camera at the first time.
+
+    :param cm: Needs method `get_camera_pose` accepting the time at which the
+        pose is desired.
+    :type cm:
+
+    :param t1: First time (seconds).
+
+    :param t2: Second time (seconds).
+    :type t2: float
+    """
+    # R1 takes a world vector and moves it into the coordinate system of the camera
+    # at t=image_times[i].
+    R1 = cm.get_camera_pose(t=t1)[:, :3]
+    # R2 takes a world vector and moves it into the coordinate system of the camera
+    # at t=image_times[i + 1].
+    R2 = cm.get_camera_pose(t=t2)[:, :3]
+
+    # R2 = R1*R1_2
+    R1_2 = np.dot(R1.T, R2)
+    return cv2.Rodrigues(R1_2.T)[0].ravel()
 
 
 def calibrate_camera_to_xyz(im_pts, wrld_pts, height, width,
