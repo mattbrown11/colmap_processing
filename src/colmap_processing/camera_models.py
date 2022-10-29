@@ -62,7 +62,7 @@ from colmap_processing.geo_conversions import enu_to_llh, llh_to_enu
 import colmap_processing.dp as dp
 from colmap_processing.rotations import euler_from_quaternion, \
     quaternion_multiply, quaternion_matrix, quaternion_from_euler, \
-    quaternion_inverse, euler_matrix, quaternion_from_matrix
+    quaternion_inverse, quaternion_from_matrix
 
 
 def to_str(v):

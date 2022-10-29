@@ -13,7 +13,7 @@ try:
     # Use ROS tf.transformations for rotation operations.
     from tf.transformations import euler_from_quaternion, quaternion_multiply, \
         quaternion_matrix, quaternion_from_euler, \
-        quaternion_inverse, euler_matrix
+        quaternion_inverse, euler_matrix, quaternion_slerp
 
     from tf.transformations import quaternion_from_matrix as quaternion_from_matrix4x4
 
@@ -60,11 +60,21 @@ except ImportError:
 
         return quat_wxyz_to_xyzw(transformations.quaternion_from_matrix(R))
 
-    def quaternion_from_euler(xyz):
-        return quat_wxyz_to_xyzw(transformations.quaternion_from_euler(xyz))
+    def euler_from_quaternion(quat, axes='sxyz'):
+        quat = quat_xyzw_to_wxyz(quat)
+        return transformations.euler_from_quaternion(quat, axes)
+
+    def quaternion_from_euler(xyz, axes='sxyz'):
+        quat = transformations.quaternion_from_euler(xyz, axes='sxyz')
+        return quat_wxyz_to_xyzw(quat)
 
     def quaternion_inverse(quat):
         quat = quat_xyzw_to_wxyz(quat)
         quat = transformations.quaternion_inverse(quat)
+        return quat_wxyz_to_xyzw(quat)
+
+    def quaternion_slerp(quat):
+        quat = quat_xyzw_to_wxyz(quat)
+        quat = transformations.quaternion_slerp(quat)
         return quat_wxyz_to_xyzw(quat)
 # -----------------------------------------------------------------------------
