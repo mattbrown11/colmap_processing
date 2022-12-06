@@ -52,12 +52,90 @@ from pyembree import rtcore_scene as rtcs
 from pyembree.mesh_construction import TriangleMesh
 
 
+def fit_plane(xyz):
+    '''Fit plane to xyz coordinates.
+
+    :param xyz: 3-D coordinates.
+    :type xyz: N x 3
+    '''
+    plane_point = np.mean(xyz, 0)
+    x = xyz - np.atleast_2d(plane_point)
+    M = np.dot(x.T, x)
+    plane_normal = np.linalg.svd(M)[0][:,-1]
+    plane_normal *= np.sign(plane_normal[-1])
+    return plane_point, plane_normal
+
+
 class WorldModel(object):
     def __init__(self):
         pass
 
     def intersect_rays(self, ray_pos, ray_dir):
+        """Intersect rays with the world model.
+
+        :param ray_pos: Ray starting position(s).
+        :type ray_pos: array with shape (3) or (3, N)
+
+        :param ray_dir: Ray direction(s).
+        :type ray_dir: array with shape (3) or (3, N)
+
+        """
         raise NotImplementedError
+
+
+class WorldModelInfinity(WorldModel):
+    def __init__(self, inf_dist=1e6):
+        self.inf_dist = inf_dist
+
+    def intersect_rays(self, ray_pos, ray_dir):
+        """Intersect rays with the world model.
+
+        :param ray_pos: Ray starting position(s).
+        :type ray_pos: array with shape (3) or (3, N)
+
+        :param ray_dir: Ray direction(s).
+        :type ray_dir: array with shape (3) or (3, N)
+
+        """
+        return ray_pos + self.inf_dist*ray_dir
+
+
+class WorldModelPlane(WorldModel):
+    def __init__(self, plane_point, plane_normal, epsilon=1e-6):
+        self.plane_point = np.array(plane_point)
+        self.plane_normal = np.array(plane_normal)
+        self.epsilon = epsilon
+
+    def intersect_rays(self, ray_pos, ray_dir):
+        """Intersect rays with the world model.
+
+        :param ray_pos: Ray starting position(s).
+        :type ray_pos: array with shape (3) or (3, N)
+
+        :param ray_dir: Ray direction(s).
+        :type ray_dir: array with shape (3) or (3, N)
+
+        """
+        ndotu = np.dot(self.plane_normal, ray_dir)
+
+        if ray_dir.ndim == 1:
+            if abs(ndotu) < self.epsilon:
+                return np.nan
+
+            w = ray_pos - self.plane_point
+            si = -self.plane_normal.dot(w) / ndotu
+            Psi = w + si * ray_dir + self.plane_point
+            return Psi
+
+        psi = np.zeros_like(ray_pos)
+        psi[:, ndotu < self.epsilon] = np.nan
+
+        plane_point = np.atleast_2d(self.plane_point)
+        plane_point = np.reshape(plane_point, (3, 1))
+        w = ray_pos - plane_point
+        si = -np.dot(self.plane_normal, w) / ndotu
+        Psi = w + si * ray_dir + plane_point
+        return Psi
 
 
 class WorldModelMesh(WorldModel):

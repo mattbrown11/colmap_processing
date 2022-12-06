@@ -152,7 +152,7 @@ def warp_perspective(image, h, dsize, interpolation=0, use_pyr=True,
 
 
 def render_view(src_cm, src_img, src_t, dst_cm, dst_t, interpolation=1,
-                block_size=1, homog_approx=False, surface_distance=1e5):
+                block_size=1, homog_approx=False, world_model=None):
     """Render view onto destination camera from a source camera image.
 
     :param src_cm: Camera model for the camera that acquired src_img.
@@ -197,6 +197,9 @@ def render_view(src_cm, src_img, src_t, dst_cm, dst_t, interpolation=1,
     :rtype: [numpy.ndarray, bool numpy.ndarray]
 
     """
+    if world_model is None:
+        surface_distance = 1e5
+
     if src_img is not None:
         if src_cm.width != src_img.shape[1] or src_cm.height != src_img.shape[0]:
             print('Camera model for image topic %s with encoded image '
@@ -230,8 +233,13 @@ def render_view(src_cm, src_img, src_t, dst_cm, dst_t, interpolation=1,
 
         # Unproject rays into camera coordinate system.
         ray_pos, ray_dir = dst_cm.unproject(im_pts, dst_t)
-        ray_dir *= surface_distance
-        points = ray_pos + ray_dir
+
+        if world_model is not None:
+            points = world_model.intersect_rays(ray_pos, ray_dir)
+        else:
+            # Project the ray out to "infinity" (well, surface_distance).
+            ray_dir *= surface_distance
+            points = ray_pos + ray_dir
 
         im_pts_src = src_cm.project(points, src_t).astype(np.float32)
 
@@ -262,8 +270,13 @@ def render_view(src_cm, src_img, src_t, dst_cm, dst_t, interpolation=1,
 
             # Unproject rays into camera coordinate system.
             ray_pos, ray_dir = dst_cm.unproject(im_pts, dst_t)
-            ray_dir *= surface_distance
-            points = ray_pos + ray_dir
+
+            if world_model is not None:
+                points = world_model.intersect_rays(ray_pos, ray_dir)
+            else:
+                # Project the ray out to "infinity" (well, surface_distance).
+                ray_dir *= surface_distance
+                points = ray_pos + ray_dir
 
             im_pts_src = src_cm.project(points, src_t).astype(np.float32)
 
@@ -281,8 +294,13 @@ def render_view(src_cm, src_img, src_t, dst_cm, dst_t, interpolation=1,
 
             # Unproject rays into camera coordinate system.
             ray_pos, ray_dir = dst_cm.unproject(im_pts, dst_t)
-            ray_dir *= surface_distance
-            points = ray_pos + ray_dir
+
+            if world_model is not None:
+                points = world_model.intersect_rays(ray_pos, ray_dir)
+            else:
+                # Project the ray out to "infinity" (well, surface_distance).
+                ray_dir *= surface_distance
+                points = ray_pos + ray_dir
 
             im_pts_src = src_cm.project(points, src_t).astype(np.float32)
 
@@ -352,7 +370,7 @@ def show_warped_points(src_cm, src_img, src_t, dst_cm, dst_t, block_size=1):
 
 
 def stitch_images(src_list, dst_cm, dst_t, interpolation=1, block_size=1,
-                  homog_approx=False):
+                  homog_approx=False, world_model=None):
     """
     :param src_list: List of frames and cameras of the form [src_cm, src_img,
         src_t].
@@ -398,7 +416,8 @@ def stitch_images(src_list, dst_cm, dst_t, interpolation=1, block_size=1,
         img, mask = render_view(src_cm, src_img, src_t, dst_cm, dst_t,
                                 interpolation=interpolation,
                                 block_size=block_size,
-                                homog_approx=homog_approx)
+                                homog_approx=homog_approx,
+                                world_model=world_model)
 
         if out_channels == 3:
             if img.ndim == 2:

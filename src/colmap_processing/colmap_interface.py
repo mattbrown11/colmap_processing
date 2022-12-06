@@ -584,6 +584,16 @@ def standard_cameras_from_colmap(cameras, images=None, image_times=None):
         elif colmap_camera.model == 'PINHOLE':
             fx, fy, cx, cy = colmap_camera.params
             d1 = d2 = d3 = d4 = 0
+        elif colmap_camera.model == 'SIMPLE_RADIAL':
+            fx, cx, cy, d1 = colmap_camera.params
+            fy = fx
+            d2 = d3 = d4 = 0
+        elif colmap_camera.model == 'RADIAL':
+            fx, cx, cy, d1, d2 = colmap_camera.params
+            fy = fx
+            d3 = d4 = 0
+        else:
+            raise NotImplementedError()
 
         K = K = np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
         dist = np.array([d1, d2, d3, d4])
