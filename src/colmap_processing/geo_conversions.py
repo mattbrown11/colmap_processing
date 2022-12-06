@@ -757,3 +757,105 @@ def rmat_ecef_enu(lat, lon, in_degrees=True):
     return np.array([[-slon, clon, 0],
                      [-clon*slat, -slon*slat, clat],
                      [clon*clat, slon*clat, slat]])
+
+
+def quat_std_to_ypr_std(quat, qx_std, qy_std, qz_std, qw_std=None):
+    """Return standard deviation in radians.
+
+    from rotations import euler_from_quaternion
+    ned_quat = np.random.rand(4)*2-1
+    ned_quat /= np.linalg.norm(ned_quat)
+    qx, qy, qz, qw = ned_quat
+    dqx, dqy, dqz = np.random.rand(3)*0.01
+
+    print(euler_from_quaternion(ned_quat, axes='rzyx'))
+
+    # Euler angles (z-y'-x'' intrinsic)
+    def roll(qx, qy, qz, qw):
+        return np.arctan2(2*(qw*qx + qy*qz), 1  - 2*(qx**2 + qy**2))
+
+    def pitch(qx, qy, qz, qw):
+        return np.arcsin(2*(qw*qy - qz*qx))
+
+    def yaw(qx, qy, qz, qw):
+        return np.arctan2(2*(qw*qz + qx*qy), 1  - 2*(qy**2 + qz**2))
+
+
+    delta = 1e-6
+
+    print((yaw(qx + delta, qy, qz, qw) - yaw(qx, qy, qz, qw))/delta,
+          (yaw(qx, qy + delta, qz, qw) - yaw(qx, qy, qz, qw))/delta,
+          (yaw(qx, qy, qz + delta, qw) - yaw(qx, qy, qz, qw))/delta,
+          (yaw(qx, qy, qz, qw + delta) - yaw(qx, qy, qz, qw))/delta)
+    print(dheading_dx, dheading_dy, dheading_dz, dheading_dw)
+
+    print((pitch(qx + delta, qy, qz, qw) - pitch(qx, qy, qz, qw))/delta,
+          (pitch(qx, qy + delta, qz, qw) - pitch(qx, qy, qz, qw))/delta,
+          (pitch(qx, qy, qz + delta, qw) - pitch(qx, qy, qz, qw))/delta,
+          (pitch(qx, qy, qz, qw + delta) - pitch(qx, qy, qz, qw))/delta)
+    print(dpitch_dx, dpitch_dy, dpitch_dz, dpitch_dw)
+
+    print((roll(qx + delta, qy, qz, qw) - roll(qx, qy, qz, qw))/delta,
+          (roll(qx, qy + delta, qz, qw) - roll(qx, qy, qz, qw))/delta,
+          (roll(qx, qy, qz + delta, qw) - roll(qx, qy, qz, qw))/delta,
+          (roll(qx, qy, qz, qw + delta) - roll(qx, qy, qz, qw))/delta)
+    print(droll_dx, droll_dy, droll_dz, droll_dw)
+
+
+    """
+    qx, qy, qz, qw = quat
+
+    # Common subexpression replacement.
+    qx2 = qx**2
+    qy2 = qy**2
+    qz2 = qz**2
+    qwqy = qw*qy
+    qxqz = qx*qz
+    qyqz = qy*qz
+    qwqx = qw*qx
+    qwqz = qw*qz
+    qxqy = qx*qy
+    C1 = qwqz+qxqy
+    C2 = qz2+qy2
+    C4 = qyqz+qwqx
+    C5 = qy2+qx2
+    C6 = 1-2*(C2)
+    C7 = C6**2+4*C1**2
+    C8 = (1-2*C5)**2
+    C9 = 1-2*C5
+    C10 = 4*C4**2+C8
+    C11 = C9/C10
+    C12 = C4*8
+
+    # Heading
+    dheading_dx = (2*qy*C6)/C7
+    dheading_dy = (2*qx*C6)/C7+(8*qy*C1)/C7
+    dheading_dz = (2*qw*C6)/C7+(8*qz*C1)/C7
+    dheading_dw = (2*qz*C6)/C7
+
+    # Pitch
+    C3 = sqrt(1-4*(qwqy-qxqz)**2)
+    dpitch_dx = -2*qz/C3
+    dpitch_dy = 2*qw/C3
+    dpitch_dz = -2*qx/C3
+    dpitch_dw = 2*qy/C3
+
+    # Change in roll as function of qx
+    droll_dx = qx*C12/C10+2*qw*C11
+    droll_dy = qy*C12/C10+2*qz*C11
+    droll_dz = 2*qy*C11
+    droll_dw = 2*qx*C11
+
+    heading_std = abs(dheading_dx - dheading_dy/3 - dheading_dz/3 - dheading_dw/3)*qx_std
+    heading_std += abs(dheading_dy - dheading_dx/3 - dheading_dz/3 - dheading_dw/3)*qy_std
+    heading_std += abs(dheading_dz - dheading_dx/3 - dheading_dy/3 - dheading_dw/3)*qz_std
+
+    pitch_std = abs(dpitch_dx - dpitch_dy/3 - dpitch_dz/3 - dpitch_dw/3)*qx_std
+    pitch_std += abs(dpitch_dy - dpitch_dx/3 - dpitch_dz/3 - dpitch_dw/3)*qy_std
+    pitch_std += abs(dpitch_dz - dpitch_dx/3 - dpitch_dy/3 - dpitch_dw/3)*qz_std
+
+    roll_std = abs(droll_dx - droll_dy/3 - droll_dz/3 - droll_dw/3)*qx_std
+    roll_std += abs(droll_dy - droll_dx/3 - droll_dz/3 - droll_dw/3)*qy_std
+    roll_std += abs(droll_dz - droll_dx/3 - droll_dy/3 - droll_dw/3)*qz_std
+
+    return heading_std, pitch_std, roll_std

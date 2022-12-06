@@ -352,6 +352,13 @@ class Camera(object):
         """
         return self._platform_pose_provider
 
+    @platform_pose_provider.setter
+    def platform_pose_provider(self, value):
+        """Instance of a subclass of NavStateProvider
+
+        """
+        self._platform_pose_provider = value
+
     def __str__(self):
         string = [''.join(['image_width: ',repr(self._width),'\n'])]
         string.append(''.join(['image_height: ',repr(self._height),'\n']))
@@ -765,10 +772,11 @@ class StandardCamera(Camera):
               platform_pose_provider)
 
         self._K = np.array(K, dtype=np.float64)
-        self._dist = np.atleast_1d(dist)
+        self._dist = np.atleast_1d(dist).astype(np.float32)
         self._cam_pos = np.array(cam_pos, dtype=np.float64)
         self._cam_quat = np.array(cam_quat, dtype=np.float64)
         self._cam_quat /= np.linalg.norm(self._cam_quat)
+        self._min_ray_cos = None
 
     def __str__(self):
         string = ['model_type: standard\n']
@@ -923,6 +931,7 @@ class StandardCamera(Camera):
         K[0,2] = value[2]
         K[1,2] = value[3]
         self._K = K
+        self._min_ray_cos = None
 
     @property
     def focal_length(self):
@@ -932,6 +941,7 @@ class StandardCamera(Camera):
     def focal_length(self, value):
         self._K[0,0] = value
         self._K[1,1] = value
+        self._min_ray_cos = None
 
     @property
     def fx(self):
@@ -944,10 +954,12 @@ class StandardCamera(Camera):
     @fx.setter
     def fx(self, value):
         self._K[0,0] = value
+        self._min_ray_cos = None
 
     @fy.setter
     def fy(self, value):
         self._K[1,1] = value
+        self._min_ray_cos = None
 
     @property
     def cx(self):
@@ -960,10 +972,12 @@ class StandardCamera(Camera):
     @cx.setter
     def cx(self, value):
         self._K[0,2] = value
+        self._min_ray_cos = None
 
     @cy.setter
     def cy(self, value):
         self._K[1,2] = value
+        self._min_ray_cos = None
 
     @property
     def aspect_ratio(self):
@@ -983,6 +997,7 @@ class StandardCamera(Camera):
             value = np.zeros(4)
 
         self._dist = np.atleast_1d(value)
+        self._min_ray_cos = None
 
     @property
     def cam_pos(self):
@@ -996,6 +1011,36 @@ class StandardCamera(Camera):
     def cam_quat(self, value):
         self._cam_quat = np.atleast_1d(value)
         self._cam_quat /= np.linalg.norm(self._cam_quat)
+
+    @property
+    def min_ray_cos(self):
+        """Minimum cosine of ray angle with optical axis valid for 'project'.
+
+        For various sets of parameters for radial distortion, the function
+        might only be invertible over a limited range of ray angles.
+        """
+        if self._min_ray_cos is not None:
+            return self._min_ray_cos
+
+        if np.all(self.dist == 0):
+            self._min_ray_cos = 0
+            return self._min_ray_cos
+
+        # Make sure we aren't seeing behind the camera.
+        t = time.time()
+        center = self.cx, self.cy
+        ray0 = self.unproject(center, t, normalize_ray_dir=True)[1].ravel()
+        w, h = self.width, self.height
+        self._min_ray_cos = 1
+        for x,y in [[0,0],[w,0],[w,h],[0,h]]:
+            ray1 = self.unproject([x,  y], t, normalize_ray_dir=True)[1]
+            ray1 = ray1.ravel()
+            ray_cosi = np.dot(ray0, ray1)
+            self._min_ray_cos = np.minimum(self._min_ray_cos, ray_cosi)
+
+        self._min_ray_cos -= 1e-8
+
+        return self._min_ray_cos
 
     def update_intrinsics(self, K=None, cam_quat=None, dist=None):
         """
@@ -1051,22 +1096,16 @@ class StandardCamera(Camera):
                                    self._dist)[0]
         im_pts = np.squeeze(im_pts, 1).T
 
-        # Make sure we aren't seeing behind the camera.
-        center = self.cx, self.cy
-        ray0 = self.unproject(center, t, normalize_ray_dir=True)[1].ravel()
-        w, h = self.width, self.height
-        min_ray_cos = 1
-        for x,y in [[0,0],[w,0],[w,h],[0,h]]:
-            ray1 = self.unproject([x,  y], t, normalize_ray_dir=True)[1]
-            ray1 = ray1.ravel()
-            ray_cosi = np.dot(ray0, ray1)
-            min_ray_cos = np.minimum(min_ray_cos, ray_cosi)
+
 
          # Make homogeneous
         points = np.vstack([points, np.ones(points.shape[1])])
         points = np.dot(pose_mat, points)
         points /= np.sqrt(np.sum(points**2, 0))
-        ind = points[2] < min_ray_cos
+
+        # Add the 1e-8 to avoid "falling off the focal plane" due to rounding
+        # error.
+        ind = points[2] <= self.min_ray_cos
 
         im_pts[:, ind] = -100000
 

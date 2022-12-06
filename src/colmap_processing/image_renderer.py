@@ -42,6 +42,30 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 from scipy.interpolate import interp2d, RectBivariateSpline
+import PIL
+
+
+def save_gif(images, fname, duration=500,
+                          loop=0):
+    """
+    :param img1
+    :type img1:
+
+    :param img2:
+    :type img2:
+
+    :param fname:
+    :type fname:
+
+    :param duration: Time (milliseconds) to move between frames.
+    :type duration: float
+
+    :param loop: Number of times to loop the GIF (0 loops forever).
+    :type loop: int
+    """
+    images = [PIL.Image.fromarray(img) for img in images]
+    images[0].save(fname, save_all=True, append_images=images[1:],
+          duration=duration, loop=loop)
 
 
 def warp_perspective(image, h, dsize, interpolation=0, use_pyr=True,

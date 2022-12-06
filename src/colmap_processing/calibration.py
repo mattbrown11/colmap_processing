@@ -73,7 +73,7 @@ def horn(P, Q, fit_scale=True, fit_translation=True):
     :type Q: num_dim x N
 
     :return: Scale, rotation matrix, and translation to be applied in that
-        order.
+        order that minimizes the difference between Q and (R*s*P + t).
     :rtype:
 
     Example:
@@ -144,7 +144,7 @@ def horn(P, Q, fit_scale=True, fit_translation=True):
     else:
         t = np.zeros(len(P))
 
-    return (s, R, t)
+    return s, R, t
 
 
 def fit_plane(xyz):

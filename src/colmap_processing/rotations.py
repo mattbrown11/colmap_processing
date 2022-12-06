@@ -5,6 +5,9 @@ conventions for how they treat quaternions. This module makes sure quaternions
 are assumed to be (x, y, z, w) quaternions, which is the assumption used by the
 rest of this package.
 
+Quaternions represent a coordinate system rotation from the origin to the
+current orientation of the moving coordinate system.
+
 """
 import numpy as np
 
@@ -73,8 +76,10 @@ except ImportError:
         quat = transformations.quaternion_inverse(quat)
         return quat_wxyz_to_xyzw(quat)
 
-    def quaternion_slerp(quat):
-        quat = quat_xyzw_to_wxyz(quat)
-        quat = transformations.quaternion_slerp(quat)
+    def quaternion_slerp(quat1, quat2, weight, spin=0, shortestpath=True):
+        quat1 = quat_xyzw_to_wxyz(quat1)
+        quat2 = quat_xyzw_to_wxyz(quat2)
+        quat = transformations.quaternion_slerp(quat1, quat2, weight, spin,
+                                                shortestpath)
         return quat_wxyz_to_xyzw(quat)
 # -----------------------------------------------------------------------------
