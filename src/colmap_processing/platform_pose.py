@@ -36,6 +36,7 @@ from __future__ import division, print_function, absolute_import
 import numpy as np
 import threading
 from scipy.interpolate import interp1d
+from scipy.interpolate import UnivariateSpline
 import bisect
 
 try:
@@ -47,7 +48,8 @@ except ImportError:
 
 # colmap_processing imports
 from colmap_processing.geo_conversions import llh_to_enu
-from colmap_processing.rotations import quaternion_slerp
+from colmap_processing.rotations import quaternion_slerp, quaternion_matrix, \
+    quaternion_inverse, quaternion_multiply, euler_from_quaternion
 
 lock = threading.Lock()
 
@@ -132,16 +134,13 @@ class PlatformPoseInterp(PlatformPoseProvider):
     """
     def __init__(self, lat0=None, lon0=None, h0=None, max_length=np.inf):
         """
-        :param lat0: Geodetic latitude of origin (degrees). If None, the
-            median latitude will be used.
+        :param lat0: Geodetic latitude of origin (degrees).
         :type lat0: None | float
 
-        :param lon0: Longitude of origin (degrees). If None, the median
-            longitude will be used.
+        :param lon0: Longitude of origin (degrees).
         :type lon0: None | float
 
-        :param h0: Height above WGS84 ellipsoid at the origin (meters). If
-            None, the minimum value will be used.
+        :param h0: Height above WGS84 ellipsoid at the origin (meters).
         :type h0: None | float
 
         :param max_length: Maximum number of states to maintain in the history.
@@ -171,6 +170,12 @@ class PlatformPoseInterp(PlatformPoseProvider):
         5 - quaty
         6 - quatz
         7 - quatw
+        8 [optional] - std_easting (m)
+        9 [optional] - std_northing (m)
+        10 [optional] - std_up (m)
+        11 [optional] - std_heading (rad)
+        12 [optional] - std_pitch (rad)
+        13 [optional] - std_roll (rad)
 
         :param fname: Path to odometry text file.
         :type fname: str
@@ -401,6 +406,7 @@ class PlatformPoseInterp(PlatformPoseProvider):
         plt.rc('font', **{'size': 20})
         plt.rc('axes', linewidth=4)
         plt.plot(data[:, 1], data[:, 3])
+        plt.plot(data[:, 1], data[:, 3], '.')
 
         if show_uncertainty and self._has_std:
             ax = plt.gca()
@@ -418,6 +424,7 @@ class PlatformPoseInterp(PlatformPoseProvider):
         plt.rc('font', **{'size': 20})
         plt.rc('axes', linewidth=4)
         plt.plot(data[:, 2], data[:, 3])
+        plt.plot(data[:, 2], data[:, 3], '.')
 
         if show_uncertainty and self._has_std:
             ax = plt.gca()
@@ -435,9 +442,237 @@ class PlatformPoseInterp(PlatformPoseProvider):
         plt.rc('font', **{'size': 20})
         plt.rc('axes', linewidth=4)
         plt.plot(data[:, 0], data[:, 3])
+        plt.plot(data[:, 0], data[:, 3], '.')
         plt.xlabel('Time (s)', fontsize=40)
         plt.ylabel('Z', fontsize=40)
         plt.tight_layout()
+
+    def compare_to(self, other, crop_to_paired_times=True, max_states=None,
+                   show_uncertainty=False):
+        """Compare to another instance of PlatformPoseInterp.
+        """
+        data1 = self.pose_time_series
+        data2 = other.pose_time_series
+
+        tmin = max(min(data1[:, 0]), min(data2[:, 0]))
+        tmax = min(max(data1[:, 0]), max(data2[:, 0]))
+
+        ind = np.logical_and(data1[:, 0] >= tmin, data1[:, 0] <= tmax)
+        data1 = data1[ind]
+
+        ind = np.logical_and(data2[:, 0] >= tmin, data2[:, 0] <= tmax)
+        data2 = data2[ind]
+
+        if max_states is not None:
+            ind = np.round(np.linspace(0, len(data1) - 1, max_states)).astype(int)
+            data1 = data1[ind]
+            ind = np.round(np.linspace(0, len(data2) - 1, max_states)).astype(int)
+            data2 = data2[ind]
+
+        plt.figure(num=None, figsize=(15.3, 10.7), dpi=80)
+        plt.rc('font', **{'size': 20})
+        plt.rc('axes', linewidth=4)
+        plt.plot(data1[:, 1], data1[:, 2], 'r.', label='This')
+        plt.plot(data2[:, 1], data2[:, 2], 'b.', label='Other')
+
+        if show_uncertainty and self._has_std:
+            ax = plt.gca()
+            for i in range(len(data1)):
+                ax.add_patch(Ellipse(data1[i, 1:3],
+                                     width=data1[i, 8]*2,
+                                     height=data1[i, 9]*2,
+                                     linewidth=2, fill=False))
+
+        plt.xlabel('X', fontsize=40)
+        plt.ylabel('Y', fontsize=40)
+        plt.axis('image')
+        plt.legend(fontsize=24)
+        plt.tight_layout()
+
+        # x vs. z
+        plt.figure(num=None, figsize=(15.3, 10.7), dpi=80)
+        plt.rc('font', **{'size': 20})
+        plt.rc('axes', linewidth=4)
+        plt.plot(data1[:, 1], data1[:, 3], 'r.', label='This')
+        plt.plot(data2[:, 1], data2[:, 3], 'b.', label='Other')
+
+        if show_uncertainty and self._has_std:
+            ax = plt.gca()
+            for i in range(len(data1)):
+                ax.add_patch(Ellipse(data1[i, 1:3],
+                                     width=data1[i, 8]*2,
+                                     height=data1[i, 9]*2,
+                                     linewidth=2, fill=False))
+
+        plt.xlabel('X', fontsize=40)
+        plt.ylabel('Z', fontsize=40)
+        plt.axis('image')
+        plt.legend(fontsize=24)
+        plt.tight_layout()
+
+        plt.figure(num=None, figsize=(15.3, 10.7), dpi=80)
+        plt.rc('font', **{'size': 20})
+        plt.rc('axes', linewidth=4)
+        txt = ['Pos-X', 'Pos-Y', 'Pos-Z']
+        for i in range(1, 4):
+            plt.subplot(3, 1, i)
+            plt.plot(data1[:, 0], data1[:, i], 'r.', label='This')
+            plt.plot(data2[:, 0], data2[:, i], 'b.', label='Other')
+
+            if show_uncertainty and self._has_std:
+                ax = plt.gca()
+                for i in range(len(data1)):
+                    ax.add_patch(Ellipse(data1[i, 1:3],
+                                         width=data1[i, 8]*2,
+                                         height=data1[i, 9]*2,
+                                         linewidth=2, fill=False))
+
+            plt.xlabel('Time (s)', fontsize=40)
+            plt.ylabel(txt[i-1], fontsize=40)
+            plt.legend(fontsize=14)
+            plt.tight_layout()
+
+        plt.figure(num=None, figsize=(15.3, 10.7), dpi=80)
+        plt.rc('font', **{'size': 20})
+        plt.rc('axes', linewidth=4)
+        txt = ['Quat-X', 'Quat-Y', 'Quat-Z', 'Quat-W']
+        for i in range(1, 5):
+            plt.subplot(4, 1, i)
+            plt.plot(data1[:, 0], data1[:, i+3], 'r.', label='This')
+            plt.plot(data2[:, 0], data2[:, i+3], 'b.', label='Other')
+
+            if show_uncertainty and self._has_std:
+                ax = plt.gca()
+                for i in range(len(data1)):
+                    ax.add_patch(Ellipse(data1[i, 1:3],
+                                         width=data1[i, 8]*2,
+                                         height=data1[i, 9]*2,
+                                         linewidth=2, fill=False))
+
+            plt.xlabel('Time (s)', fontsize=40)
+            plt.ylabel(txt[i-1], fontsize=40)
+            plt.legend(fontsize=14)
+            plt.tight_layout()
+
+    def estimate_imu_output(self, rate=100, s=1/500, gravity=9.81,
+                            plot_results=False):
+        data = self.pose_time_series
+
+        times = data[:, 0]
+        N = np.ceil((times[-1] - times[0])*rate)
+        times_out = np.arange(N + 1)/rate + times[0]
+
+        if plot_results:
+            plt.figure(num=None, figsize=(15.3, 10.7), dpi=80)
+            plt.rc('font', **{'size': 20})
+            plt.rc('axes', linewidth=4)
+            labels = ['X', 'Y', 'Z']
+
+        # Calculate the acceleration vector (m/s^2) within the east/north/up
+        # coordinate system.
+        accel = []
+        for i in range(1, 4):
+            sposx = UnivariateSpline(data[:, 0], data[:, i], k=5, s=len(data)*s)
+
+            if plot_results:
+                plt.subplot(3, 1, i)
+                plt.plot(data[:, 0], data[:, i], 'bo')
+                plt.plot(data[:, 0], sposx(data[:, 0]), 'r-')
+                plt.ylabel('%s-Position (m)' % (labels[i-1]))
+                plt.tight_layout()
+
+            #plt.plot(data[:, 0], data[:, 1])
+            #plt.plot(data[:, 0], sposx(data[:, 0]), 'r.')
+            sposdxx = sposx.derivative(2)
+            accel.append(sposdxx(times_out))
+
+        accel = np.array(accel)
+        accel[2] += gravity
+        accel = accel.T
+
+        quats = [self.quat(t) for t in times_out]
+
+        if plot_results:
+            plt.figure(num=None, figsize=(15.3, 10.7), dpi=80)
+            plt.rc('font', **{'size': 20})
+            plt.rc('axes', linewidth=4)
+            labels = ['X', 'Y', 'Z', 'W']
+            quats_ =  np.array([self.quat(t) for t in times]).T
+
+            for i in range(4):
+                plt.subplot(4, 1, i + 1)
+                plt.plot(times, quats_[i], 'bo')
+                plt.ylabel('%s-Quat' % (labels[i-1]))
+
+            plt.tight_layout()
+
+        rmats = [quaternion_matrix(quats[i])[:3, :3].T
+                 for i in range(len(times_out))]
+
+        # Project into the navigation coordinate system.
+        accel_out = np.array([np.dot(rmats[i], accel[i])
+                              for i in range(len(times_out))])
+
+        omegas = []
+        dt = 1/rate
+        for i in range(len(quats) - 1):
+            q1 = quats[i]
+            q2 = quats[i + 1]
+            dq = quaternion_multiply(quaternion_inverse(q1), q2)
+            dq = dq/np.linalg.norm(dq)
+            omegas.append(dq[:3]/np.linalg.norm(dq[:3])*2*np.arccos(dq[3])/dt)
+
+        if False:
+            # Test
+            q1 = [1, 2, 3, 4]
+            R1 = quaternion_matrix(q1)[:3, :3].T
+
+            # Create random rotation vector in navigation coordinate system.
+            omega = np.random.rand(3)*2-1
+            omega_world = np.dot(R1.T, omega)
+            norm = np.linalg.norm(omega)
+            dquat = quat_wxyz_to_xyzw(transformations.quaternion_about_axis(norm, omega_world/norm))
+            q2 = quaternion_multiply(dquat, q1)
+            R2 = quaternion_matrix(q2)[:3, :3].T
+            dq = quaternion_multiply(quaternion_inverse(q1), q2)
+            omega2 = dq[:3]/np.linalg.norm(dq[:3])*2*np.arccos(dq[3])
+            print(omega - omega2)
+
+        accel_out = (accel_out[1:] + accel_out[:-1])/2
+        times_out = (times_out[1:] + times_out[:-1])/2
+        omegas = np.array(omegas)
+        out = np.hstack([np.atleast_2d(times_out).T, accel_out, omegas])
+
+        if plot_results:
+            data = out.T
+            plt.figure(num=None, figsize=(15.3, 10.7), dpi=80)
+            plt.rc('font', **{'size': 20})
+            plt.rc('axes', linewidth=4)
+            plt.subplot(311)
+            plt.plot(data[0], data[1], '.')
+            plt.ylabel('X-Accel (m/s^2)')
+            plt.subplot(312)
+            plt.plot(data[0], data[2], '.')
+            plt.ylabel('Y-Accel (m/s^2)')
+            plt.subplot(313)
+            plt.plot(data[0], data[3], '.')
+            plt.ylabel('Z-Accel (m/s^2)')
+            plt.tight_layout()
+
+            plt.figure(num=None, figsize=(15.3, 10.7), dpi=80);
+            plt.subplot(311)
+            plt.plot(data[0], data[4], '.')
+            plt.ylabel('X-Angular Vel (rad/s)')
+            plt.subplot(312)
+            plt.plot(data[0], data[5], '.')
+            plt.ylabel('Y-Angular Vel (rad/s)')
+            plt.subplot(313)
+            plt.plot(data[0], data[6], '.')
+            plt.ylabel('Z-Angular Vel (rad/s)')
+            plt.tight_layout()
+
+        return out
+
 
 
 class PlatformPoseFixed(PlatformPoseProvider):
