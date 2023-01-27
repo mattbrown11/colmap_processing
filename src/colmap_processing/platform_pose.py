@@ -47,9 +47,10 @@ except ImportError:
     HAS_MATPLOTLIB = False
 
 # colmap_processing imports
-from colmap_processing.geo_conversions import llh_to_enu
+from colmap_processing.geo_conversions import llh_to_enu, enu_to_llh
 from colmap_processing.rotations import quaternion_slerp, quaternion_matrix, \
     quaternion_inverse, quaternion_multiply, euler_from_quaternion
+
 
 lock = threading.Lock()
 
@@ -57,6 +58,8 @@ lock = threading.Lock()
 ODOMETRY_HEADERS = {}
 ODOMETRY_HEADERS['time (s)  latitude (deg)  longitude (deg)  height (m)  quatx  quaty  quatz  quatw'] = 1
 ODOMETRY_HEADERS['time (s)  latitude (deg)  longitude (deg)  height (m)  quatx  quaty  quatz  quatw std_easting (m) std_northing (m) std_up (m) std_heading (rad) std_pitch (rad) std_roll (rad)'] = 2
+ODOMETRY_HEADERS['time (s)  easting (m)  northing (m)  up (m)  quatx  quaty  quatz  quatw'] = 3
+ODOMETRY_HEADERS['time (s)  easting (m)  northing (m)  up (m)  quatx  quaty  quatz  quatw std_easting (m) std_northing (m) std_up (m) std_heading (rad) std_pitch (rad) std_roll (rad)'] = 4
 
 
 class PlatformPoseProvider(object):
@@ -248,6 +251,39 @@ class PlatformPoseInterp(PlatformPoseProvider):
     def pose_time_series(self):
         with lock:
             return self._pose_time_series
+
+    def to_odometry_llh_txt(self, odometry_txt_fname):
+        odometry = self._pose_time_series.copy()
+
+        if self.lat0 is None or self.lon0 is None or self.h0 is None:
+            if self.lat0 is not None or self.lon0 is not None or self.h0 is not None:
+                raise Exception('If any of \'lat0\', \'lon0\', \'h0\' is None, '
+                                'they should all be None')
+
+        if self.lat0 is None:
+            if self._pose_time_series.shape[1] == 8:
+                header = 'time (s)  easting (m)  northing (m)  up (m)  quatx  quaty  quatz  quatw'
+            elif self._pose_time_series.shape[1] == 14:
+                header = 'time (s)  easting (m)  northing (m)  up (m)  quatx  quaty  quatz  quatw std_easting (m) std_northing (m) std_up (m) std_heading (rad) std_pitch (rad) std_roll (rad)'
+            else:
+                raise Exception('Unhandled case for \'_pose_time_series\' '
+                                'of length %i' % self._pose_time_series.shape[1])
+        else:
+            if self._pose_time_series.shape[1] == 8:
+                header = 'time (s)  latitude (deg)  longitude (deg)  height (m)  quatx  quaty  quatz  quatw'
+            elif self._pose_time_series.shape[1] == 14:
+                header = 'time (s)  latitude (deg)  longitude (deg)  height (m)  quatx  quaty  quatz  quatw std_easting (m) std_northing (m) std_up (m) std_heading (rad) std_pitch (rad) std_roll (rad)'
+            else:
+                raise Exception('Unhandled case for \'_pose_time_series\' '
+                                'of length %i' % self._pose_time_series.shape[1])
+
+            for i in range(len(odometry)):
+                odometry[i, 1:4] = enu_to_llh(odometry[i, 1],
+                                              odometry[i, 2],
+                                              odometry[i, 3], self.lat0, self.lon0,
+                                              self.h0)
+
+        np.savetxt(odometry_txt_fname, odometry, header=header)
 
     def add_to_pose_time_series(self, t, pos, quat, std=None):
         """Adds to pose time series such that time is monotonically
