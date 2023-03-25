@@ -345,9 +345,12 @@ def rescale_sfm_to_ins(cm, ins, wrld_pts):
     return cm_out, wrld_pts_out
 
 
-def read_colmap_results(recon_dir, use_camera_id=1, max_images=None,
-                        max_image_pts=None, min_track_len=3):
+def read_colmap_results(recon_dir, use_camera_id=None, max_images=None,
+                        max_image_pts=None, min_track_len=None):
     """Read colmap bin data and return camera and image with 3d point pairs.
+
+    This function assumes that the image filenames encode the integer number of
+    microseconds since the Unix epoch.
 
     Parameters
     ----------
@@ -406,6 +409,14 @@ def read_colmap_results(recon_dir, use_camera_id=1, max_images=None,
         for t in sorted(list(colmap_images0.keys()))[:max_images]:
             colmap_images[t] = colmap_images0[t]
 
+    if use_camera_id is None:
+        keys = list(colmap_cameras.keys())
+        if len(keys) > 1:
+            raise Exception('Found multiply camera models %s, need to pick '
+                           'which one to use for all images' % str(keys))
+
+        use_camera_id = keys[0]
+
     image_times = {}
     for ind in colmap_images:
         colmap_images[ind] = ColmapImage(colmap_images[ind].id,
@@ -437,8 +448,10 @@ def read_colmap_results(recon_dir, use_camera_id=1, max_images=None,
         point3D_ind = image.point3D_ids
         ind = point3D_ind != -1
         point3D_ind = point3D_ind[ind]
-        ind = track_len[point3D_ind] >= min_track_len
-        point3D_ind = point3D_ind[ind]
+
+        if min_track_len is not None:
+            ind = track_len[point3D_ind] >= min_track_len
+            point3D_ind = point3D_ind[ind]
 
         if max_image_pts is not None and len(point3D_ind) > max_image_pts:
             ind = np.argsort([track_len[i] for i in point3D_ind])[::-1][:max_image_pts]
