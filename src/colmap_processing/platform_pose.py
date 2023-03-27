@@ -247,17 +247,6 @@ class PlatformPoseInterp(PlatformPoseProvider):
 
         return self
 
-    def to_odometry_llh_txt(self, fname):
-        odometry = self.pose_time_series
-        if odometry.shape[1] == 8:
-            header = 'time (s)  latitude (deg)  longitude (deg)  height (m)  quatx  quaty  quatz  quatw'
-        elif odometry.shape[1] == 14:
-            header = 'time (s)  latitude (deg)  longitude (deg)  height (m)  quatx  quaty  quatz  quatw std_easting (m) std_northing (m) std_up (m) std_heading (rad) std_pitch (rad) std_roll (rad)'
-        else:
-            raise Exception()
-
-        np.savetxt(fname, odometry, header=header)
-
     @property
     def pose_time_series(self):
         with lock:
@@ -719,7 +708,6 @@ class PlatformPoseInterp(PlatformPoseProvider):
             plt.tight_layout()
 
         return out
-
 
 
 class PlatformPoseFixed(PlatformPoseProvider):
