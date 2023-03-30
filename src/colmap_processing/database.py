@@ -272,9 +272,9 @@ class COLMAPDatabase(sqlite3.Connection):
 
     def get_keypoint_from_image_dict(self):
         cursor = self.cursor()
-        cursor.execute("SELECT image_id, data FROM keypoints")
-        keypoints = dict((image_id, blob_to_array(data, np.float32, (-1, 2)))
-                         for image_id, data in cursor)
+        cursor.execute("SELECT image_id, rows, cols, data FROM keypoints")
+        keypoints = dict((image_id, blob_to_array(data, np.float32, (row, col)))
+                         for image_id, row, col, data in cursor)
         return keypoints
 
     def get_descriptors_from_image_dict(self):
