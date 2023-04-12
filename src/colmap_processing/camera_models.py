@@ -49,6 +49,7 @@ from scipy.optimize import fmin, fminbound, minimize
 import copy
 import pickle
 import PIL
+from math import sqrt
 
 try:
     import matplotlib.pyplot as plt
@@ -231,6 +232,9 @@ def load_from_file(filename, platform_pose_provider=None):
 
     if calib['model_type'] == 'standard':
         return StandardCamera.load_from_file(filename, platform_pose_provider)
+
+    if calib['model_type'] == 'rolling_shutter':
+        return RollingShutterCamera.load_from_file(filename, platform_pose_provider)
 
     if calib['model_type'] == 'depth':
         return DepthCamera.load_from_file(filename, platform_pose_provider)
@@ -1096,9 +1100,7 @@ class StandardCamera(Camera):
                                    self._dist)[0]
         im_pts = np.squeeze(im_pts, 1).T
 
-
-
-         # Make homogeneous
+        # Make homogeneous
         points = np.vstack([points, np.ones(points.shape[1])])
         points = np.dot(pose_mat, points)
         points /= np.sqrt(np.sum(points**2, 0))
@@ -1151,6 +1153,233 @@ class StandardCamera(Camera):
         if normalize_ray_dir:
             # Normalize
             ray_dir /= np.sqrt(np.sum(ray_dir**2, 0))
+
+        return ray_pos, ray_dir
+
+
+class RollingShutterCamera(StandardCamera):
+    """Standard camera model.
+
+    This is a model for a camera that is rigidly mounted to the navigation
+    coordinate system. The camera model specification follows that of Opencv.
+
+    See addition parameter definitions in base class Camera.
+
+    :param K: Camera intrinsic matrix.
+    :type K: 3x3 numpy.ndarray | None
+
+    :param cam_pos: Position of the camera's center of projection in the
+        navigation coordinate system.
+    :type cam_pos: numpy.ndarray | None
+
+    :param cam_quat: Quaternion (x, y, z, w) specifying the orientation of the
+        camera relative to the navigation coordinate system. The quaternion
+        represents a coordinate system rotation that takes the navigation
+        coordinate system and rotates it into the camera coordinate system.
+    :type cam_quat: numpy.ndarray | None
+
+    :param dist: Input vector of distortion coefficients (k1, k2, p1, p2, k3,
+        k4, k5, k6) of 4, 5, or 8 elements.
+    :type dist: numpy.ndarray
+
+    """
+    def __init__(self, width, height, K, dist, cam_pos, cam_quat,
+                 shutter_roll_time, platform_pose_provider=None):
+        """
+        See additional documentation from base class above.
+
+        """
+        super(RollingShutterCamera, self).__init__(width, height, K, dist,
+                                                   cam_pos, cam_quat,
+                                                   platform_pose_provider)
+        self.shutter_roll_time = shutter_roll_time
+
+    def __str__(self):
+        string = ['model_type: rolling_shutter\n']
+        string.append(super(RollingShutterCamera, self).__str__())
+        string.append('shutter_roll_time: %s\n' %self.shutter_roll_time)
+        return ''.join(string)
+
+    @classmethod
+    def load_from_file(cls, filename, platform_pose_provider=None):
+        """See base class Camera documentation.
+
+        """
+        with open(filename, 'r') as f:
+            calib = yaml.safe_load(f)
+
+        assert calib['model_type'] == 'rolling_shutter'
+
+        # fill in CameraInfo fields
+        width = calib['image_width']
+        height = calib['image_height']
+        shutter_roll_time = calib['shutter_roll_time']
+        dist = calib['distortion_coefficients']
+
+        if dist == 'None':
+            dist = np.zeros(4)
+
+        fx = calib['fx']
+        fy = calib['fy']
+        cx = calib['cx']
+        cy = calib['cy']
+        K = np.array([[fx,0,cx],[0,fy,cy],[0,0,1]])
+
+        cam_quat = calib['camera_quaternion']
+        cam_pos = calib['camera_position']
+
+        return cls(width, height, K, dist, cam_pos, cam_quat,
+                   shutter_roll_time, platform_pose_provider)
+
+    def save_to_file(self, filename):
+        """See base class Camera documentation.
+
+        """
+        with open(filename, 'w') as f:
+            f.write(''.join(['# The type of camera model.\n',
+                             'model_type: rolling_shutter\n\n',
+                             '# Image dimensions\n']))
+
+            f.write(''.join(['image_width: ',to_str(self.width),'\n']))
+            f.write(''.join(['image_height: ',to_str(self.height),'\n\n']))
+
+            f.write(''.join(['shutter_roll_time: ',
+                             to_str(self.shutter_roll_time),'\n\n']))
+
+            f.write('# Focal length along the image\'s x-axis.\n')
+            f.write(''.join(['fx: ',to_str(self.K[0,0]),'\n\n']))
+
+            f.write('# Focal length along the image\'s y-axis.\n')
+            f.write(''.join(['fy: ',to_str(self.K[1,1]),'\n\n']))
+
+            f.write('# Principal point is located at (cx,cy).\n')
+            f.write(''.join(['cx: ',to_str(self.K[0,2]),'\n']))
+            f.write(''.join(['cy: ',to_str(self.K[1,2]),'\n\n']))
+
+            f.write(''.join(['# Distortion coefficients following OpenCv\'s ',
+                    'convention\n']))
+
+            dist = self.dist
+            if np.all(dist == 0):
+                dist = 'None'
+
+            f.write(''.join(['distortion_coefficients: ',
+                             to_str(self.dist),'\n\n']))
+
+            f.write(''.join(['# Quaternion (x, y, z, w) specifying the ',
+                             'orientation of the camera relative to\n# the ',
+                             'platform coordinate system. The quaternion ',
+                             'represents a coordinate\n# system rotation that ',
+                             'takes the platform coordinate system and ',
+                             'rotates it\n# into the camera coordinate ',
+                             'system.\ncamera_quaternion: ',
+                             to_str(self.cam_quat),'\n\n']))
+
+            f.write(''.join(['# Position of the camera\'s center of ',
+                             'projection within the navigation\n# coordinate ',
+                             'system.\n',
+                             'camera_position: ',to_str(self.cam_pos),
+                             '\n\n']))
+
+    def project(self, points, t=None):
+        """See Camera.project documentation.
+
+        """
+        # The challenge projecting into a rolling shutter camera is that every
+        # row of the image is exposed at a different time. So, if you assume a
+        # particular time to evaluate the pose at and then project into the
+        # image, the y coordinate of that result may indicate a different time.
+        # So, you must search for the time such that the y-coordinate of the
+        # projection agrees with the time.
+        proj_fun = super(RollingShutterCamera, self).project
+
+        # We start by projecting assuming all points are at the time associated
+        # with the center of the field of view.
+        im_pts = proj_fun(points, t + 0.5*self.shutter_roll_time)
+
+        if False:
+            # Slower but more accurate.
+            L = im_pts.shape[1]
+
+            # 'ind' encodes the indices into im_pts that need to be further
+            # checked that refining the
+            ind = np.ones(L, dtype=bool)
+
+            cont = True
+            for _ in range(10):
+                cont = False
+                for i in range(L):
+                    if ind[i]:
+                        # The fraction of the rolling shutter time this y
+                        # coordinate has accumulated.
+                        alpha = np.clip(im_pts[1, i]/self.height, 0, 1)
+                        t_ = t + alpha*self.shutter_roll_time
+                        im_pt_ = proj_fun(points[:, i:i+1], t_)
+                        d = sqrt(np.sum((im_pt_ - im_pts[:, i:i+1])**2))
+
+                        if d > 0.01:
+                            cont = True
+                        else:
+                            ind[i] = False
+
+                        im_pts[:, i:i+1] = im_pt_
+
+                if not cont:
+                    break
+        else:
+            N = 10
+            alphas = np.linspace(0, 1, N)
+            im_pts_list = [proj_fun(points, t + alpha*self.shutter_roll_time).T
+                           for alpha in alphas]
+            im_pts_list = np.array(im_pts_list).T
+            alphas2 = np.clip(im_pts_list[1]/self.height, 0, 1)
+            alpha_err = alphas2 - alphas
+
+            # We want to interpolate to the zero-valued alpha error.
+            # ind1 is the index of the smallest-magnitude alpha_error.
+            # ind2 is the index of the second-smallest-magnitude alpha_error.
+            ind = np.argpartition(np.abs(alpha_err), 2, axis=1)[:, :2]
+
+            ind1 = ind[:, 0:1]
+            ind2 = ind[:, 1:2]
+            alpha_err1 = np.take_along_axis(alpha_err, ind1, axis=1).ravel()
+            alpha_err2 = np.take_along_axis(alpha_err, ind2, axis=1).ravel()
+
+            # Linearly interpolate the im_pts. w encodes the fraction of ind1
+            # to take.
+            # w*(alpha_err2 - alpha_err1) + alpha_err1 = 0
+            # w*alpha_err2 + (1-w)*alpha_err1 = 0
+            delta = alpha_err1 - alpha_err2
+            w = np.ones(len(alpha_err1))
+            ind = delta != 0
+            w[ind] = (alpha_err1[ind])/delta[ind]
+
+            im_pts1 = np.hstack([np.take_along_axis(im_pts_list[0], ind1, axis=1),
+                                 np.take_along_axis(im_pts_list[1], ind1, axis=1)]).T
+
+            im_pts2 = np.hstack([np.take_along_axis(im_pts_list[0], ind2, axis=1),
+                                 np.take_along_axis(im_pts_list[1], ind2, axis=1)]).T
+
+            im_pts = w*im_pts2 + (1-w)*im_pts1
+
+        return im_pts
+
+    def unproject(self, points, t, normalize_ray_dir=True):
+        """See Camera.unproject documentation.
+
+        """
+        points = np.array(points, dtype=np.float64)
+        if points.ndim == 1:
+            points = np.atleast_2d(points).T
+            points = np.reshape(points, (2,-1))
+
+        alphas = np.clip(points[1]/self.height, 0, 1)
+        ts_ = t + (alphas*self.shutter_roll_time).astype(np.float64)
+
+        ret = [super(RollingShutterCamera, self).unproject(points[:, i:i+1], ts_[i])
+               for i in range(len(ts_))]
+        ray_pos = np.hstack([ret_[0] for ret_ in ret])
+        ray_dir = np.hstack([ret_[1] for ret_ in ret])
 
         return ray_pos, ray_dir
 

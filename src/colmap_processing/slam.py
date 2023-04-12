@@ -182,8 +182,14 @@ def map_to_pinhole_problem(cm, im_pts_at_time):
     return cm_pinhole, im_pts_at_time
 
 
-def reprojection_error(cm, im_pts_at_time, wrld_pts, plot_results=False):
+def reprojection_error(cm, im_pts_at_time, wrld_pts, wrld_pts_to_score=None,
+                       plot_results=False):
     """Calculate mean reprojection error in pixels.
+
+    wrld_pts_to_score : None | bool array-like
+        Boolean array of length equal to the number of world points (columns of
+        wrld_pts) indicating which world points to consider when calculating
+        the error. If None, all will be scored.
     """
     err = []
     image_times = sorted(list(im_pts_at_time.keys()))
@@ -192,27 +198,55 @@ def reprojection_error(cm, im_pts_at_time, wrld_pts, plot_results=False):
     N10 = 0
     N20 = 0
     N = 0
+    point_dist = []
     for t in image_times:
-        im_pts, point3D_ind = im_pts_at_time[t]
-        err_ = np.sqrt(np.sum((im_pts - cm.project(wrld_pts[:, point3D_ind], t))**2, axis=0))
-        N2 += sum(err_ < 4)
-        N4 += sum(err_ < 16)
-        N10 += sum(err_ < 100)
-        N20 += sum(err_ < 400)
-        N += len(err_)
-        err.append(np.median(err_))
+        ret = im_pts_at_time[t]
+        if ret is None:
+            continue
 
-    print('%0.1f%% < 2 pixels, %0.1f%% < 4 pixels, %0.1f%% < 10 pixels, '
+        im_pts, point3D_ind = ret
+
+        if wrld_pts_to_score is not None:
+            ind = wrld_pts_to_score[point3D_ind]
+            im_pts = im_pts[:, ind]
+            point3D_ind = point3D_ind[ind]
+            if len(point3D_ind) == 0:
+                continue
+
+        err_ = np.sqrt(np.sum((im_pts - cm.project(wrld_pts[:, point3D_ind], t))**2, axis=0))
+        N2 += sum(err_ < 2)
+        N4 += sum(err_ < 4)
+        N10 += sum(err_ < 10)
+        N20 += sum(err_ < 20)
+        N += len(err_)
+        err.append(err_)
+
+        ray_pos, ray_dir = cm.unproject(im_pts, t, normalize_ray_dir=True)
+        point_dir = wrld_pts[:, point3D_ind] - ray_pos
+        d = np.sum(ray_dir*point_dir, axis=0)
+        point_dist.append(d)
+
+    point_dist = np.hstack(point_dist)
+    err = np.hstack(err)
+
+    print('Error %0.1f%% < 2 pixels, %0.1f%% < 4 pixels, %0.1f%% < 10 pixels, '
           '%0.1f%% < 20 pixels' % (100*N2/N, 100*N4/N, 100*N10/N, 100*N20/N))
+
+    print('Point distance from camera %0.1f (0%%), %0.1f (25%%), '
+          '%0.1f (50%%), %0.1f (75%%), %0.1f (100%%)' %
+          (np.percentile(point_dist, 0),
+           np.percentile(point_dist, 25),
+           np.percentile(point_dist, 50),
+           np.percentile(point_dist, 75),
+           np.percentile(point_dist, 100)))
 
     if plot_results:
         plt.figure(num=None, figsize=(15.3, 10.7), dpi=80)
         plt.rc('font', **{'size': 20})
         plt.rc('axes', linewidth=4)
-        plt.plot(err, '.')
-        plt.xlabel('Time (s)', fontsize=40)
+        plt.plot(np.sort(err), '.')
+        plt.xlabel('Percentile', fontsize=40)
         plt.ylabel('Image Mean Error (pixels)', fontsize=40)
-        print('Time with max error', image_times[np.argmax(err)])
 
     return np.mean(err)
 
@@ -265,11 +299,30 @@ def show_solution_errors(cm, cm_ins, im_pts_at_time, wrld_pts):
 
 
 def show_reproj_error_on_images(cm, im_pts_at_time, wrld_pts, image_names,
-                                image_dir, out_dir):
+                                image_dir, out_dir, wrld_pts_to_show=None):
+    """Show reprojection error on images.
+
+    wrld_pts_to_show : None | bool array-like
+        Boolean array of length equal to the number of world points (columns of
+        wrld_pts) indicating which world points to consider when calculating
+        the error. If None, all will be shown.
+    """
     image_times = sorted(list(im_pts_at_time.keys()))
     for t in image_times:
-        im_pts, point3D_ind = im_pts_at_time[t]
-        im_pts2 = cm.project(wrld_pts[:, point3D_ind], t)
+        ret = im_pts_at_time[t]
+        if ret is None:
+            continue
+
+        im_pts, point3D_ind = ret
+
+        if wrld_pts_to_show is not None:
+            ind = wrld_pts_to_show[point3D_ind]
+            im_pts = im_pts[:, ind]
+            point3D_ind = point3D_ind[ind]
+
+        if len(point3D_ind) > 0:
+            im_pts2 = cm.project(wrld_pts[:, point3D_ind], t)
+
         img = cv2.imread('%s/%s' % (image_dir, image_names[t]))[:, :, ::-1].copy()
 
         for i in range(im_pts.shape[1]):
@@ -1056,31 +1109,40 @@ class OfflineSLAM(object):
 
                 if t2 - t1 < 5:
                     # This is the index for either an exact match for
-                    # imu_times[ind1]=t1 or nearest where imu_times[ind1]<t1
-                    # This is the first bin that partially intersects with the
-                    # timespan t1->t2.
+                    # imu_times[ind1]=t1 or largest imu_times where imu_times[ind1]<=t1.
+                    # This is the first bin that partially intersects with the timespan
+                    # t1->t2. If negative, that means that there all imu_times > t1.
                     ind1 = bisect.bisect_right(imu_times, t1) - 1
 
-                    # This is the last bin that partially intersects with the
-                    # timespan t1->t2, though it may intersect zero.
+                    # ind2 is the smallest imu_times value such that t2 < imu_times[ind2].
+                    # If ind2 == len(imu_times), that means there is no time such that
+                    # all imu_times < t2.
                     ind2 = bisect.bisect_right(imu_times, t2)
 
-                    if ind1 > 0:
-                        dt = t1 - imu_times[ind1]
-                        if dt > 0:
+                    if ind2 == ind1 + 1:
+                        # t1 and t2 live entirely inside the imu_times[ind1]->imu_times[ind2]
+                        dt = t2 - t1
+                        pim.integrateMeasurement(accel_gyro_data[ind1, :3],
+                                                 accel_gyro_data[ind1, 3:], dt)
+                    else:
+                        if ind1 >= 0 and ind2 > 1:
+                            # t1 to t1 + dt is inside imu_times[ind1] -> imu_times[ind1 + 1].
+                            dt = imu_times[ind1 + 1] - t1
+                            assert dt > 0
                             pim.integrateMeasurement(accel_gyro_data[ind1, :3],
                                                      accel_gyro_data[ind1, 3:], dt)
 
-                    for ind in range(ind1+1, ind2):
-                        dt = imu_times[ind + 1] - imu_times[ind]
-                        pim.integrateMeasurement(accel_gyro_data[ind, :3],
-                                                 accel_gyro_data[ind, 3:], dt)
+                        for ind in range(ind1+1, ind2 - 1):
+                            # These are bins that are entire covered by the range t1 -> t2.
+                            dt = imu_times[ind + 1] - imu_times[ind]
+                            pim.integrateMeasurement(accel_gyro_data[ind, :3],
+                                                     accel_gyro_data[ind, 3:], dt)
 
-                    if ind2 < len(imu_times):
-                        dt = imu_times[ind2] - t2
-                        if dt > 0:
-                            pim.integrateMeasurement(accel_gyro_data[ind2, :3],
-                                                     accel_gyro_data[ind2, 3:], dt)
+                        if ind2 < len(imu_times):
+                            dt = t2 - imu_times[ind2 - 1]
+                            if dt > 0:
+                                pim.integrateMeasurement(accel_gyro_data[ind2-1, :3],
+                                                         accel_gyro_data[ind2-1, 3:], dt)
 
                     print(np.diag(pim.preintMeasCov()))
 
@@ -1175,6 +1237,7 @@ class OfflineSLAM(object):
             if imu_data is not None:
                 self.initial_estimate.insert(V(i), np.zeros(3))
 
+        self.wrld_pts_orig = wrld_pts
         self.wrld_pts_orig_ind = np.where(wrld_pts_used)[0]
         for j in self.wrld_pts_orig_ind:
             point = points3d[j]
@@ -1281,8 +1344,10 @@ class OfflineSLAM(object):
             cm2.cam_quat = quaternion_from_matrix(np.dot(R.T, self.Rins_to_cam).T)
             print(R)
 
-        wrld_pts = np.array([self.result.atPoint3(L(i))
-                             for i in self.wrld_pts_orig_ind]).T
+        wrld_pts = self.wrld_pts_orig.copy()
+        wrld_pts_ = np.array([self.result.atPoint3(L(i))
+                              for i in self.wrld_pts_orig_ind]).T
+        wrld_pts[:, self.wrld_pts_orig_ind] = wrld_pts_
 
         ppp = PlatformPoseInterp(self.cm.platform_pose_provider.lat0,
                                  self.cm.platform_pose_provider.lon0,
