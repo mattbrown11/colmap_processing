@@ -719,7 +719,7 @@ class Camera(object):
         """See Camera.unproject_to_depth documentation.
 
         """
-        points = self._unproject_to_depth(points, self.depth_map, t=None)
+        points = self._unproject_to_depth(points, self.depth_map, t=t)
         return points
 
     def save_depth_viz(self, fname):
