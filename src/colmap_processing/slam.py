@@ -206,6 +206,9 @@ def reprojection_error(cm, im_pts_at_time, wrld_pts, wrld_pts_to_score=None,
 
         im_pts, point3D_ind = ret
 
+        if im_pts.shape[1] == 0:
+            continue
+
         if wrld_pts_to_score is not None:
             ind = wrld_pts_to_score[point3D_ind]
             im_pts = im_pts[:, ind]
@@ -299,7 +302,8 @@ def show_solution_errors(cm, cm_ins, im_pts_at_time, wrld_pts):
 
 
 def show_reproj_error_on_images(cm, im_pts_at_time, wrld_pts, image_names,
-                                image_dir, out_dir, wrld_pts_to_show=None):
+                                image_dir, out_dir, wrld_pts_to_show=None,
+                                radius=6, thickness=2):
     """Show reprojection error on images.
 
     wrld_pts_to_show : None | bool array-like
@@ -320,17 +324,20 @@ def show_reproj_error_on_images(cm, im_pts_at_time, wrld_pts, image_names,
             im_pts = im_pts[:, ind]
             point3D_ind = point3D_ind[ind]
 
-        if len(point3D_ind) > 0:
-            im_pts2 = cm.project(wrld_pts[:, point3D_ind], t)
+        if len(point3D_ind) == 0:
+            continue
+
+        im_pts2 = cm.project(wrld_pts[:, point3D_ind], t)
 
         img = cv2.imread('%s/%s' % (image_dir, image_names[t]))[:, :, ::-1].copy()
 
         for i in range(im_pts.shape[1]):
             pt1 = np.round(im_pts[:, i]).astype(int)
             pt2 = np.round(im_pts2[:, i]).astype(int)
-            cv2.circle(img, (pt1[0], pt1[1]), 6, (255, 0, 0), 2)
-            cv2.circle(img, (pt2[0], pt2[1]), 6, (0, 0, 255), 2)
-            cv2.line(img, (pt1[0], pt1[1]), (pt2[0], pt2[1]), (0, 255, 0), 1)
+            cv2.circle(img, (pt1[0], pt1[1]), radius, (255, 0, 0), thickness)
+            cv2.circle(img, (pt2[0], pt2[1]), radius, (0, 0, 255), thickness)
+            cv2.line(img, (pt1[0], pt1[1]), (pt2[0], pt2[1]), (0, 255, 0),
+                     thickness)
 
         base = os.path.splitext(os.path.split(image_names[t])[1])[0]
         cv2.imwrite('%s/%s.jpg' % (out_dir, base), img[:, :, ::-1])

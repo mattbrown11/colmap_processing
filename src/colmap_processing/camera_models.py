@@ -490,7 +490,7 @@ class Camera(object):
         """
         raise NotImplementedError
 
-    def image_points_to_llh(self, points, t=None, cov=None):
+    def unproject_to_llh(self, points, t=None, cov=None):
         """Get latitude, longitude, height associated with image coordinate(s).
 
         :param points: Coordinates of a point or points within the image
@@ -1808,3 +1808,18 @@ class GeoStaticCamera(DepthCamera):
         ray_pos = np.zeros_like(ray_dir)
 
         return ray_pos, ray_dir
+
+
+class MapCamera(Camera):
+    """Camera producing map images.
+
+    This object is primarily built around GDAL.
+
+    """
+    def __init__(self, base_layer):
+        super(MapCamera, self).__init__(width=base_layer.res_x,
+                                        height=base_layer.res_y)
+        self.base_layer = base_layer
+
+    def project(self, points, t=None):
+        return np.array([self.base_layer.meters_to_raster(point) for point in points.T]).T

@@ -175,7 +175,7 @@ def check_valid_camera(width, height, K, dist, rvec, tvec):
     return True
 
 
-def cam_depth_map_plane(camera_model, plane_point, plane_normal):
+def cam_depth_map_plane(camera_model, t, plane_point, plane_normal):
     """Calculate depth map for camera assuming it is viewing plane.
 
     """
@@ -184,7 +184,8 @@ def cam_depth_map_plane(camera_model, plane_point, plane_normal):
     X, Y = np.meshgrid(np.linspace(0.5, width - 0.5, width),
                        np.linspace(0.5, height - 0.5, height))
     im_pts = np.vstack([X.ravel(), Y.ravel()])
-    ray_pos, ray_dir = camera_model.unproject(im_pts, normalize_ray_dir=False)
+    ray_pos, ray_dir = camera_model.unproject(im_pts, t,
+                                              normalize_ray_dir=False)
 
     ip = ray_intersect_plane(plane_point, plane_normal, ray_pos, ray_dir,
                              epsilon=1e-6)

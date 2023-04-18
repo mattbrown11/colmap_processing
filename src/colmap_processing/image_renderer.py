@@ -374,7 +374,7 @@ def stitch_images(src_list, dst_cm, dst_t, interpolation=1, block_size=1,
     """
     :param src_list: List of frames and cameras of the form [src_cm, src_img,
         src_t].
-    :type src_list: [Camera, Numpy array, float]
+    :type src_list: [[Camera, Numpy array, float], ...]
 
     :param dst_cm: Camera to render the view onto.
     :type dst_cm: Camera

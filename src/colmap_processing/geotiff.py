@@ -183,7 +183,7 @@ class GeoTIFF(object):
         if self._raster is None:
             raster = self.gdal_ds.GetRasterBand(1).ReadAsArray()
             if self.gdal_ds.RasterCount > 1:
-                self._raster = np.zeros((self.res_y,self.res_x,3),
+                self._raster = np.zeros((self.res_y,self.res_x, self.gdal_ds.RasterCount),
                                        dtype=raster.dtype)
                 self._raster[:, :, 0] = raster
                 for i in range(1, self.gdal_ds.RasterCount):

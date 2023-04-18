@@ -7,6 +7,27 @@ import os
 img_fnames = glob.glob('images/*.png')
 img_fnames.sort()
 
+def apply_clahe(img, clip_limit):
+    img = img.astype(np.float)
+    img -= np.percentile(img.ravel(), 0.01)
+    img /= np.percentile(img.ravel(), 99.99)
+    img = np.clip(img, 0, 1)
+    img = np.round(img*255).astype(np.uint8)
+    clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=(16, 16))
+
+    return clahe.apply(img)
+
+
+for img_fname in img_fnames:
+    print(img_fname)
+    img = cv2.imread(img_fname, cv2.IMREAD_UNCHANGED)
+    if img.ndim == 3:
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    img = apply_clahe(img, clip_limit=3)
+    cv2.imwrite(img_fname, img)
+
+
 k = 0
 
 img1 = cv2.cvtColor(cv2.imread(img_fnames[0]), cv2.COLOR_BGR2GRAY)
@@ -21,7 +42,9 @@ optical_flow_90 = []
 sharpness = []
 while True:
     try:
-        img2 = cv2.cvtColor(cv2.imread(img_fnames[k]), cv2.COLOR_BGR2GRAY)
+        img2 = cv2.imread(img_fnames[k], cv2.IMREAD_UNCHANGED)
+        if img2.ndim == 3:
+            img2 = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     except IndexError:
         break
 
@@ -30,12 +53,11 @@ while True:
     sobely = cv2.Sobel(img2, cv2.CV_64F, 0, 1).ravel()
     sharpness.append(np.mean(np.sqrt(sobelx**2 + sobely**2)))
 
-    if True:
+    if False:
         # Just calculate sharpness
         print(k)
         k += 1
         continue
-
 
     w = 256
     XY = np.meshgrid(np.arange(w//2, img1.shape[1] - w//2, w),
@@ -56,7 +78,7 @@ while True:
     optical_flow_90.append(np.percentile(delta, 90))
     print('Optical flow is', optical_flow_50[-1], 'pixels')
 
-    if True:
+    if False:
         if k > 0 and optical_flow_50[-1] < 10:
             print('Removing', img_fnames[k])
             os.remove(img_fnames[k])
@@ -77,6 +99,10 @@ plt.plot(times, optical_flow_10)
 plt.plot(times, optical_flow_50)
 plt.plot(times, optical_flow_90)
 plt.plot(times, sharpness/sharpness.max())
+
+if False:
+    ind = np.argsort(optical_flow_50)[::-1][3]
+    plt.imshow(cv2.imread(img_fnames[ind], cv2.IMREAD_UNCHANGED), 'gray')
 
 ind = np.nonzero(sharpness < 0.28*sharpness.max())[0]
 
